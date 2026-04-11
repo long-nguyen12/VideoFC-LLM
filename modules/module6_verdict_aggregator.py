@@ -49,37 +49,29 @@ logger = logging.getLogger(__name__)
 
 _AGGREGATOR_SYSTEM_PROMPT = """\
 You are a fact-checking verdict aggregator.
-You receive the original composite claim, intermediate answers from N reasoning
-hops, a cross-modal conflict report, and an evidence gate status.
-Produce a single final verdict with a step-by-step reasoning trace and a
-counterfactual statement.
+Given a claim, hop answers, a cross-modal conflict report, and evidence gate status, produce a verdict.
 
-Respond ONLY with valid JSON — no markdown fences, no preamble:
+Respond ONLY with valid JSON — no markdown, no preamble:
 {
   "claim_id": "<string>",
   "verdict": "supported" | "refuted" | "insufficient_evidence" | "misleading_context",
   "confidence": <float 0.0–1.0>,
-  "reasoning_trace": [
-    {
-      "step": <integer starting at 1>,
-      "finding": "<string>",
-      "source_hop": <integer | null>,
-      "evidence_ids": ["<string>", ...]
-    }
-  ],
-  "modal_conflict_used": <true | false>,
-  "counterfactual": "<string — what would need to change for the verdict to flip>"
-}"""
+  "reasoning_trace": [{"step": <int>, "finding": "<string>", "source_hop": <int|null>, "evidence_ids": ["<string>"]}],
+  "modal_conflict_used": <true|false>,
+  "counterfactual": "<one sentence>"
+}
+Keep reasoning_trace to at most 3 steps. Keep each finding under 20 words."""
 
 
-def _format_hop_answers(hop_results: list[HopResult]) -> str:
+def _format_hop_answers(hop_results: list[HopResult], max_hops: int = 4) -> str:
     lines = []
-    for h in hop_results:
-        status = "UNKNOWN" if h.answer_unknown else f"confidence={h.confidence:.2f}"
-        lines.append(
-            f'Hop {h.hop}: Q: "{h.question}" → A: "{h.answer}" ({status})'
-            f' supported_by={h.supported_by}'
-        )
+    for h in hop_results[:max_hops]:
+        status = "UNKNOWN" if h.answer_unknown else f"conf={h.confidence:.2f}"
+        # Truncate long answers to keep the prompt short for small models
+        answer = h.answer[:120] + "…" if len(h.answer) > 120 else h.answer
+        lines.append(f'Hop {h.hop}: Q: "{h.question[:80]}" → A: "{answer}" ({status})')
+    if len(hop_results) > max_hops:
+        lines.append(f"… ({len(hop_results) - max_hops} more hops truncated)")
     return "\n".join(lines) if lines else "No hop answers available."
 
 
@@ -91,22 +83,25 @@ def _build_aggregator_prompt(
     modal_report: ModalConflictReport,
     strength_report: EvidenceStrengthReport,
 ) -> list[dict[str, str]]:
+    # Truncate free-text fields so the total prompt fits in a small context window
+    caption_short  = visual_caption[:120]
+    conflict_line  = (
+        f"conflict={modal_report.conflict_flag}  dominant={modal_report.dominant_conflict}  "
+        f"vc={modal_report.vc_score:.2f}  tc={modal_report.tc_score:.2f}  vt={modal_report.vt_score:.2f}"
+    )
+    gate_line = (
+        f"gate={'PASS' if strength_report.gate_pass else 'FAIL'}  "
+        f"cov={strength_report.coverage_score:.2f}  "
+        f"conf={strength_report.confidence_score:.2f}  "
+        f"cons={strength_report.consistency_score:.2f}"
+    )
     user_content = (
-        f'Original claim: "{claim.claim_text}"\n'
+        f'Claim: "{claim.claim_text[:200]}"\n'
         f'Claim ID: "{claim.claim_id}"\n'
-        f'Visual caption: "{visual_caption}"\n'
-        f"Timestamp: {segment.start_ts}s – {segment.end_ts}s\n\n"
-        f"Hop answers:\n{_format_hop_answers(hop_results)}\n\n"
-        f"Cross-modal conflict report:\n"
-        f"  Visual↔Claim score:      {modal_report.vc_score:.4f}\n"
-        f"  Transcript↔Claim score:  {modal_report.tc_score:.4f}\n"
-        f"  Visual↔Transcript score: {modal_report.vt_score:.4f}\n"
-        f"  Conflict flag:            {modal_report.conflict_flag}\n"
-        f"  Dominant conflict:        {modal_report.dominant_conflict}\n\n"
-        f"Evidence gate passed: {strength_report.gate_pass}\n"
-        f"Coverage score:       {strength_report.coverage_score:.4f}\n"
-        f"Confidence score:     {strength_report.confidence_score:.4f}\n"
-        f"Consistency score:    {strength_report.consistency_score:.4f}\n\n"
+        f'Visual: "{caption_short}"\n\n'
+        f"Hops:\n{_format_hop_answers(hop_results)}\n\n"
+        f"Modal: {conflict_line}\n"
+        f"Gate:  {gate_line}\n\n"
         "Produce the verdict."
     )
     return [
@@ -204,7 +199,7 @@ def aggregate_verdict(
     last_exc: Exception | None = None
     for attempt in range(max_retries + 1):
         try:
-            raw = llm.generate(prompt, max_new_tokens=1024)
+            raw = llm.generate(prompt, max_new_tokens=512)
             data = _safe_json_parse(raw)
 
             reasoning_trace = [

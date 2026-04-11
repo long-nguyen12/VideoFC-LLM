@@ -90,6 +90,7 @@ def run_dataset_pipeline(
     models: ModelBundle,
     retriever: DenseRetriever,
     use_rationale_hints: bool = True,
+    max_sub_questions: int = 5,
 ) -> ExplainabilityReport:
     """
     Execute the pipeline from a PipelineInputs object.
@@ -107,6 +108,8 @@ def run_dataset_pipeline(
     retriever            : DenseRetriever pre-indexed on a passage corpus.
     use_rationale_hints  : Whether to inject gold rationale into Module 1.
                            Set False for blind test-set evaluation.
+    max_sub_questions    : Cap on sub-questions from the decomposer.
+                           Use 3 when running with a ≤2B single-model bundle.
 
     Returns
     -------
@@ -160,6 +163,7 @@ def run_dataset_pipeline(
         conflict_flag=modal_report.conflict_flag,
         llm=models.decomposer_llm,
         rationale_hint=rationale_hint,
+        max_sub_questions=max_sub_questions,
     )
     logger.info("Decomposed into %d sub-questions.", len(claim.sub_questions))
 
@@ -256,6 +260,11 @@ def run_dataset_record(
     DatasetEvalResult
     """
     inputs = record_to_pipeline_inputs(record, keyframe_paths=keyframe_paths)
+
+    # Index the record-specific evidence corpus so dynamic retrieval (Modules 4 & 5) works
+    if inputs.initial_evidence:
+        retriever.index(list(inputs.initial_evidence))
+
     report = run_dataset_pipeline(
         inputs=inputs,
         models=models,

@@ -72,12 +72,45 @@ pip install bitsandbytes
 python example_usage.py --stub
 ```
 
-### Full mode (downloads ~10–15 GB on first run)
+### Single-LLM mode (hardware-constrained, ~3.5 GB VRAM)
+```bash
+python example_usage.py --single-llm
+```
+
+### Full multi-model mode (downloads ~10–15 GB on first run)
 ```bash
 python example_usage.py
 ```
 
-### In code
+### In code — single-LLM bundle
+
+```python
+from models import load_single_llm_bundle
+from modules import DenseRetriever
+from dataset import record_to_pipeline_inputs, run_dataset_pipeline
+from dataset.dataset_loader import DatasetLoader
+
+models = load_single_llm_bundle(
+    llm_model="Qwen/Qwen2.5-1.5B-Instruct",  # ~3.5 GB
+    captioner_model=None,   # skip VLM when no keyframes
+    load_in_4bit=False,
+    context_window=2048,
+)
+retriever = DenseRetriever(models.encoder)
+retriever.index(initial_evidence)
+
+inputs = record_to_pipeline_inputs(record)
+report = run_dataset_pipeline(
+    inputs=inputs,
+    models=models,
+    retriever=retriever,
+    use_rationale_hints=True,
+    max_sub_questions=3,    # keep hops short for 1.5B model
+)
+print(report.verdict, report.confidence)
+```
+
+### In code — full multi-model bundle
 
 ```python
 from pipeline import run_pipeline
@@ -85,36 +118,20 @@ from models import load_default_bundle
 from modules import DenseRetriever
 from schemas import VideoSegment, EvidenceRef
 
-# Load all models
 models = load_default_bundle(load_in_4bit=True)
-
-# Index a passage corpus for retrieval
 retriever = DenseRetriever(models.encoder)
-retriever.index(passage_corpus)   # list[EvidenceRef]
+retriever.index(passage_corpus)
 
-# Build a segment
 segment = VideoSegment(
-    segment_id="seg-001",
-    start_ts=0.0,
-    end_ts=30.0,
-    transcript="The bridge was declared safe following a 2023 inspection.",
-    keyframes=["frame_00.jpg"],
+    segment_id="seg-001", start_ts=0.0, end_ts=30.0,
+    transcript="The bridge was declared safe in 2023.", keyframes=["frame_00.jpg"],
 )
-
-# Run
 report = run_pipeline(
     claim_text="The bridge collapsed due to neglected maintenance.",
-    claim_id="claim-001",
-    segment=segment,
-    initial_evidence=initial_evidence,
-    models=models,
-    retriever=retriever,
+    claim_id="claim-001", segment=segment,
+    initial_evidence=initial_evidence, models=models, retriever=retriever,
 )
-
-print(report.verdict)            # "refuted"
-print(report.confidence)         # 0.91
-print(report.hop_summaries)      # ["Maintenance was not neglected.", ...]
-print(report.model_dump_json(indent=2))
+print(report.verdict)
 ```
 
 ## Running Tests
@@ -127,7 +144,23 @@ pytest
 pytest --cov
 ```
 
+## VRAM Budget Reference
+
+| Configuration | LLM | VLM | NLI + Encoder | Total |
+|---|---|---|---|---|
+| **Single-LLM, no VLM** | Qwen2.5-1.5B (~3.5 GB) | — | ~0.5 GB | **~4 GB** |
+| **Single-LLM, 4-bit, no VLM** | Qwen2.5-1.5B 4-bit (~1.8 GB) | — | ~0.5 GB | **~2.5 GB** |
+| **Single-LLM + moondream2** | Qwen2.5-1.5B (~3.5 GB) | moondream2 (~3.5 GB) | ~0.5 GB | **~7.5 GB** |
+| **Single-LLM 3B** | Qwen2.5-3B (~6 GB) | — | ~0.5 GB | **~6.5 GB** |
+| **Full multi-model** | Phi-3-mini + Qwen2.5-3B + Mistral-7B | LLaVA-1.6-7B | ~0.5 GB | **~22 GB** |
+| **Full multi-model, 4-bit** | same, quantised | same, quantised | ~0.5 GB | **~12 GB** |
+
+`load_in_4bit=True` requires `bitsandbytes>=0.43` and CUDA.  
+On CPU, use `context_window=2048` to avoid OOM during tokenisation.
+
 ## Model Defaults
+
+### Full bundle (`load_default_bundle`)
 
 | Role | Default model | Size |
 |---|---|---|
@@ -138,7 +171,16 @@ pytest --cov
 | Per-hop reader | `Qwen/Qwen2.5-3B-Instruct` | 3B |
 | Verdict aggregator | `mistralai/Mistral-7B-Instruct-v0.3` | 7B |
 
-Override any model via `load_default_bundle(aggregator_model="meta-llama/Meta-Llama-3.1-8B-Instruct")`.
+### Single-model bundle (`load_single_llm_bundle`)
+
+| Role | Default model | Size |
+|---|---|---|
+| Visual captioner | `vikhyatk/moondream2` (or `None`) | 1.8B |
+| NLI scorer | `cross-encoder/nli-deberta-v3-small` | 184M |
+| Text encoder | `BAAI/bge-small-en-v1.5` | 33M |
+| All three LLM roles | `Qwen/Qwen2.5-1.5B-Instruct` | 1.5B |
+
+Override with: `load_single_llm_bundle(llm_model="Qwen/Qwen2.5-3B-Instruct")`
 
 ## Key Design Decisions
 

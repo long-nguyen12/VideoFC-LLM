@@ -32,26 +32,27 @@ logger = logging.getLogger(__name__)
 # Prompt builders
 # ---------------------------------------------------------------------------
 
-_SYSTEM_PROMPT = """\
+_SYSTEM_PROMPT_TEMPLATE = """\
 You are a claim decomposer for a video fact-checking system.
 Given a composite claim and a video context summary, decompose the claim
 into an ordered list of atomic sub-questions. Each sub-question must be:
 - independently verifiable
 - answerable from external evidence or the video content
 - ordered so that earlier answers can condition later questions
+- Produce at most {max_sub_questions} sub-questions.
 
 Respond ONLY with valid JSON — no markdown fences, no preamble:
-{
+{{
   "claim_id": "<string>",
   "sub_questions": [
-    {
+    {{
       "hop": <integer starting at 1>,
       "question": "<string>",
       "depends_on_hops": [<integer>, ...],
       "evidence_type": "video" | "web" | "kb" | "any"
-    }
+    }}
   ]
-}"""
+}}"""
 
 
 def _build_user_message(
@@ -67,13 +68,12 @@ def _build_user_message(
     hint_block = f'\nKnown rationale context (use to guide decomposition):\n"{rationale_hint}"\n' if rationale_hint else ""
     return (
         f'Claim ID: "{claim_id}"\n'
-        f'Claim: "{claim_text}"\n'
-        f'Visual caption: "{visual_caption}"\n'
-        f'Transcript excerpt: "{transcript_excerpt}"\n'
-        f"Timestamp: {start_ts}s – {end_ts}s\n"
-        f"Modal conflict flag: {conflict_flag}\n"
+        f'Claim: "{claim_text[:200]}"\n'
+        f'Visual: "{visual_caption[:120]}"\n'
+        f'Transcript: "{transcript_excerpt[:200]}"\n'
+        f"Conflict flag: {conflict_flag}\n"
         f"{hint_block}\n"
-        "Decompose this claim into atomic sub-questions."
+        "Decompose this claim."
     )
 
 
@@ -86,10 +86,12 @@ def _build_prompt(
     conflict_flag: bool,
     claim_id: str,
     rationale_hint: str = "",
+    max_sub_questions: int = 5,
 ) -> list[dict[str, str]]:
     """Return a chat-template message list."""
+    system_prompt = _SYSTEM_PROMPT_TEMPLATE.format(max_sub_questions=max_sub_questions)
     return [
-        {"role": "system", "content": _SYSTEM_PROMPT},
+        {"role": "system", "content": system_prompt},
         {
             "role": "user",
             "content": _build_user_message(
@@ -134,22 +136,26 @@ def decompose_claim(
     llm: GenerativeLLM,
     max_retries: int = 2,
     rationale_hint: str = "",
+    max_sub_questions: int = 5,
 ) -> ClaimDecomposition:
     """
     Decompose a composite claim into atomic sub-questions.
 
     Parameters
     ----------
-    claim_text     : The full claim string to verify.
-    claim_id       : Stable identifier for this claim.
-    segment        : The associated VideoSegment (provides transcript + timestamps).
-    visual_caption : Caption produced by the visual captioner for this segment.
-    conflict_flag  : Whether Module 2 detected a cross-modal conflict.
-    llm            : A loaded GenerativeLLM instance.
-    max_retries    : Number of generation retries on parse failure.
-    rationale_hint : Optional gold-rationale summary injected into the prompt
-                     (from RationaleContext.prompt_summary()). Guides the LLM
-                     toward evidence-aligned sub-questions when available.
+    claim_text        : The full claim string to verify.
+    claim_id          : Stable identifier for this claim.
+    segment           : The associated VideoSegment (provides transcript + timestamps).
+    visual_caption    : Caption produced by the visual captioner for this segment.
+    conflict_flag     : Whether Module 2 detected a cross-modal conflict.
+    llm               : A loaded GenerativeLLM instance.
+    max_retries       : Number of generation retries on parse failure.
+    rationale_hint    : Optional gold-rationale summary injected into the prompt
+                        (from RationaleContext.prompt_summary()). Guides the LLM
+                        toward evidence-aligned sub-questions when available.
+    max_sub_questions : Hard cap on the number of sub-questions returned.
+                        Set to 3 when using a ≤2B model to keep multi-hop
+                        context within the model's reliable output length.
 
     Returns
     -------
@@ -164,6 +170,7 @@ def decompose_claim(
         conflict_flag=conflict_flag,
         claim_id=claim_id,
         rationale_hint=rationale_hint,
+        max_sub_questions=max_sub_questions,
     )
 
     last_exc: Exception | None = None
@@ -184,6 +191,9 @@ def decompose_claim(
 
             if not sub_questions:
                 raise ValueError("LLM returned zero sub-questions.")
+
+            # Hard-cap: silently drop any excess sub-questions
+            sub_questions = sub_questions[:max_sub_questions]
 
             return ClaimDecomposition(
                 claim_id=data.get("claim_id", claim_id),

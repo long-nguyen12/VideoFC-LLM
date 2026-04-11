@@ -199,7 +199,7 @@ def _build_stub_retriever():
 # Main
 # ---------------------------------------------------------------------------
 
-def main(stub: bool = False) -> None:
+def main(stub: bool = False, single_llm: bool = False) -> None:
     from schemas.data_models import VideoSegment, EvidenceRef
 
     segment = VideoSegment(**SAMPLE_SEGMENT_DATA)
@@ -209,8 +209,21 @@ def main(stub: bool = False) -> None:
         logger.info("Running in STUB mode — no models loaded.")
         models = _build_stub_bundle()
         retriever = _build_stub_retriever()
+    elif single_llm:
+        logger.info("Loading single-LLM bundle (hardware-constrained mode).")
+        from models.model_bundle import load_single_llm_bundle
+        from modules.module4_targeted_retrieval import DenseRetriever
+
+        models = load_single_llm_bundle(
+            llm_model="Qwen/Qwen2.5-1.5B-Instruct",
+            captioner_model=None,        # no keyframes in this example
+            load_in_4bit=False,
+            context_window=2048,
+        )
+        retriever = DenseRetriever(models.encoder)
+        retriever.index(initial_evidence)
     else:
-        logger.info("Loading real models — this may take several minutes on first run.")
+        logger.info("Loading full multi-model bundle — this may take several minutes.")
         from models.model_bundle import load_default_bundle
         from modules.module4_targeted_retrieval import DenseRetriever
 
@@ -219,6 +232,11 @@ def main(stub: bool = False) -> None:
         retriever.index(initial_evidence)
 
     from pipeline import run_pipeline
+    from modules.module1_claim_decomposer import decompose_claim as _dc
+    import modules.module1_claim_decomposer as _m1
+
+    # When running in single-llm mode, cap sub-questions at 3
+    max_sub = 3 if single_llm else 5
 
     report = run_pipeline(
         claim_text=SAMPLE_CLAIM_TEXT,
@@ -232,8 +250,9 @@ def main(stub: bool = False) -> None:
     # ---------------------------------------------------------------------------
     # Pretty-print results
     # ---------------------------------------------------------------------------
+    mode_label = "STUB" if stub else ("SINGLE-LLM" if single_llm else "FULL")
     print("\n" + "=" * 70)
-    print("FACT-CHECK RESULT")
+    print(f"FACT-CHECK RESULT  [{mode_label} MODE]")
     print("=" * 70)
     print(f"Claim    : {SAMPLE_CLAIM_TEXT}")
     print(f"Verdict  : {report.verdict.upper()}")
@@ -259,7 +278,6 @@ def main(stub: bool = False) -> None:
     print(f"\n--- Counterfactual ---\n  {report.counterfactual}")
     print("=" * 70)
 
-    # Also dump full JSON to stdout for downstream consumption
     print("\n[Full JSON report]")
     print(report.model_dump_json(indent=2))
 
@@ -270,5 +288,13 @@ if __name__ == "__main__":
         "--stub", action="store_true",
         help="Run with stub models (no GPU or downloads required).",
     )
+    parser.add_argument(
+        "--single-llm", dest="single_llm", action="store_true",
+        help=(
+            "Run with a single small LLM for all roles "
+            "(Qwen2.5-1.5B, ~3.5 GB VRAM). "
+            "Downloads ~3 GB on first run."
+        ),
+    )
     args = parser.parse_args()
-    main(stub=args.stub)
+    main(stub=args.stub, single_llm=args.single_llm)

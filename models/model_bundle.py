@@ -204,10 +204,20 @@ class GenerativeLLM:
     Supports chat-template models (Phi-3, Mistral, Qwen, LLaMA-3).
 
     model_name examples:
+        "Qwen/Qwen2.5-1.5B-Instruct"   # single-model / hardware-constrained
+        "Qwen/Qwen2.5-3B-Instruct"
         "microsoft/Phi-3-mini-4k-instruct"
         "mistralai/Mistral-7B-Instruct-v0.3"
-        "Qwen/Qwen2.5-3B-Instruct"
         "meta-llama/Meta-Llama-3.1-8B-Instruct"
+
+    Parameters
+    ----------
+    max_new_tokens_cap : Hard ceiling on generated tokens regardless of what
+                         the caller requests. Set this to 512 for 2B models to
+                         avoid running past the useful generation length.
+    context_window     : Maximum input token length fed to the model.
+                         Qwen2.5-1.5B / 2B support 32 K, but keeping this at
+                         2048 on CPU avoids OOM on constrained hardware.
     """
 
     def __init__(
@@ -215,9 +225,14 @@ class GenerativeLLM:
         model_name: str,
         device: Optional[torch.device] = None,
         load_in_4bit: bool = False,
+        max_new_tokens_cap: int = 1024,
+        context_window: int = 4096,
     ):
         self.device = device or _device()
-        logger.info("Loading generative LLM: %s", model_name)
+        self.max_new_tokens_cap = max_new_tokens_cap
+        self.context_window = context_window
+        logger.info("Loading generative LLM: %s  (max_new_tokens_cap=%d, context_window=%d)",
+                    model_name, max_new_tokens_cap, context_window)
 
         quantization_config = None
         if load_in_4bit:
@@ -265,14 +280,16 @@ class GenerativeLLM:
         else:
             text = prompt if isinstance(prompt, str) else str(prompt)
 
-        inputs = self.tokenizer(text, return_tensors="pt", truncation=True, max_length=4096).to(
-            self.model.device
-        )
+        inputs = self.tokenizer(
+            text, return_tensors="pt",
+            truncation=True, max_length=self.context_window,
+        ).to(self.model.device)
         input_len = inputs["input_ids"].shape[1]
 
+        effective_max = min(max_new_tokens, self.max_new_tokens_cap)
         output_ids = self.model.generate(
             **inputs,
-            max_new_tokens=max_new_tokens,
+            max_new_tokens=effective_max,
             do_sample=do_sample,
             temperature=temperature if do_sample else 1.0,
             pad_token_id=self.tokenizer.pad_token_id,
@@ -313,7 +330,8 @@ def load_default_bundle(
     load_in_4bit: bool = False,
 ) -> ModelBundle:
     """
-    Convenience factory that loads all models with sensible defaults.
+    Full multi-model bundle. Loads a separate checkpoint for each pipeline
+    role. Requires ~20 GB VRAM (or ~12 GB with load_in_4bit=True).
     Override any model name to swap in a different checkpoint.
     """
     device = _device()
@@ -324,4 +342,82 @@ def load_default_bundle(
         decomposer_llm=GenerativeLLM(decomposer_model, device=device, load_in_4bit=load_in_4bit),
         hop_llm=GenerativeLLM(hop_model, device=device, load_in_4bit=load_in_4bit),
         aggregator_llm=GenerativeLLM(aggregator_model, device=device, load_in_4bit=load_in_4bit),
+    )
+
+
+def load_single_llm_bundle(
+    llm_model: str = "Qwen/Qwen2.5-1.5B-Instruct",
+    captioner_model: str = "vikhyatk/moondream2",
+    nli_model: str = "cross-encoder/nli-deberta-v3-small",
+    encoder_model: str = "BAAI/bge-small-en-v1.5",
+    load_in_4bit: bool = False,
+    context_window: int = 2048,
+) -> ModelBundle:
+    """
+    Hardware-constrained bundle: one small LLM shared across all three
+    generative roles (decomposer, hop reader, aggregator).
+
+    The single LLM is loaded once and the same Python object is assigned to
+    all three ModelBundle slots — no duplication of weights in memory.
+
+    Recommended models by VRAM budget
+    ----------------------------------
+    <4 GB  : "Qwen/Qwen2.5-0.5B-Instruct"   or  "Qwen/Qwen2.5-1.5B-Instruct"
+    4–6 GB : "Qwen/Qwen2.5-3B-Instruct"      or  "microsoft/Phi-3-mini-4k-instruct"
+    6–8 GB : any of the above with load_in_4bit=False
+
+    The captioner defaults to moondream2 (1.8 B, ~3.5 GB), which is the
+    lightest VLM that produces usable captions. Set captioner_model=None to
+    skip the captioner entirely and always use the synthetic caption path
+    (appropriate when the dataset provides no keyframes).
+
+    Parameters
+    ----------
+    llm_model       : HuggingFace model ID for the single shared LLM.
+    captioner_model : VLM for keyframe captioning. Pass None to disable.
+    nli_model       : NLI classifier (184 M, always separate — no generation).
+    encoder_model   : Dense retrieval encoder (33 M, always separate).
+    load_in_4bit    : Enable bitsandbytes 4-bit quantisation on the LLM.
+                      Cuts VRAM roughly in half; requires bitsandbytes>=0.43.
+    context_window  : Max input token length. Keep at 2048 on CPU to avoid
+                      OOM; raise to 4096 on GPU if VRAM permits.
+
+    Returns
+    -------
+    ModelBundle  where decomposer_llm, hop_llm, aggregator_llm all point to
+                 the same GenerativeLLM instance.
+    """
+    device = _device()
+    logger.info(
+        "Loading single-LLM bundle: llm=%s  captioner=%s  4bit=%s  ctx=%d",
+        llm_model, captioner_model, load_in_4bit, context_window,
+    )
+
+    # The aggregator prompt is the longest; cap new tokens at 512 for small
+    # models so generation does not run past the useful JSON response.
+    shared_llm = GenerativeLLM(
+        llm_model,
+        device=device,
+        load_in_4bit=load_in_4bit,
+        max_new_tokens_cap=512,
+        context_window=context_window,
+    )
+
+    if captioner_model is not None:
+        captioner = VisualCaptioner(captioner_model, device=device)
+    else:
+        # Dummy captioner — caption_fn always returns an empty string so the
+        # pipeline falls back to the synthetic caption from the dataset adapter.
+        class _NullCaptioner:
+            def caption(self, keyframes: list[str], **_) -> str:
+                return ""
+        captioner = _NullCaptioner()  # type: ignore[assignment]
+
+    return ModelBundle(
+        captioner=captioner,
+        nli=NLIScorer(nli_model, device=device),
+        encoder=TextEncoder(encoder_model, device=device),
+        decomposer_llm=shared_llm,   # ─┐
+        hop_llm=shared_llm,          #  ├─ same object, weights loaded once
+        aggregator_llm=shared_llm,   # ─┘
     )
