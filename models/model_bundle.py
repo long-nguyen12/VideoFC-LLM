@@ -55,26 +55,30 @@ def _load_image(source: str) -> Image.Image:
 
 
 # ---------------------------------------------------------------------------
-# Visual Captioner (LLaVA-1.6 or moondream2)
+# Visual Captioner (Qwen2-VL)
 # ---------------------------------------------------------------------------
 
 class VisualCaptioner:
     """
-    Wraps LLaVA-1.6-mistral-7b-hf for keyframe captioning.
-    Set model_name to "vikhyatk/moondream2" for the lightweight variant.
+    Wraps Qwen2-VL for keyframe captioning.
+    Defaults to Qwen/Qwen2-VL-2B-Instruct as it is highly efficient and capable.
     """
 
-    DEFAULT_MODEL = "llava-hf/llava-v1.6-mistral-7b-hf"
+    DEFAULT_MODEL = "Qwen/Qwen2-VL-2B-Instruct"
 
     def __init__(self, model_name: str = DEFAULT_MODEL, device: Optional[torch.device] = None):
+        from transformers import Qwen2VLForConditionalGeneration, AutoProcessor
         self.device = device or _device()
         logger.info("Loading visual captioner: %s", model_name)
-        self.processor = LlavaNextProcessor.from_pretrained(model_name)
-        self.model = LlavaNextForConditionalGeneration.from_pretrained(
+        self.processor = AutoProcessor.from_pretrained(model_name)
+        self.model = Qwen2VLForConditionalGeneration.from_pretrained(
             model_name,
             torch_dtype=torch.float16 if self.device.type == "cuda" else torch.float32,
             low_cpu_mem_usage=True,
-        ).to(self.device)
+            device_map="auto" if self.device.type == "cuda" else None,
+        )
+        if self.device.type != "cuda":
+            self.model = self.model.to(self.device)
         self.model.eval()
 
     @torch.inference_mode()
@@ -92,8 +96,8 @@ class VisualCaptioner:
                     "content": [{"type": "image"}, {"type": "text", "text": prompt}],
                 }
             ]
-            text = self.processor.apply_chat_template(conversation, add_generation_prompt=True)
-            inputs = self.processor(images=image, text=text, return_tensors="pt").to(self.device)
+            text = self.processor.apply_chat_template(conversation, add_generation_prompt=True, tokenize=False)
+            inputs = self.processor(images=[image], text=[text], padding=True, return_tensors="pt").to(self.device)
             output_ids = self.model.generate(**inputs, max_new_tokens=128, do_sample=False)
             # Strip the input tokens from the output
             generated = output_ids[0, inputs["input_ids"].shape[1]:]
@@ -321,7 +325,7 @@ class ModelBundle:
 
 
 def load_default_bundle(
-    captioner_model: str = "llava-hf/llava-v1.6-mistral-7b-hf",
+    captioner_model: str = "Qwen/Qwen2-VL-2B-Instruct",
     nli_model: str = "cross-encoder/nli-deberta-v3-small",
     encoder_model: str = "BAAI/bge-small-en-v1.5",
     decomposer_model: str = "microsoft/Phi-3-mini-4k-instruct",
@@ -347,7 +351,7 @@ def load_default_bundle(
 
 def load_single_llm_bundle(
     llm_model: str = "Qwen/Qwen2.5-1.5B-Instruct",
-    captioner_model: str = "vikhyatk/moondream2",
+    captioner_model: str = "Qwen/Qwen2-VL-2B-Instruct",
     nli_model: str = "cross-encoder/nli-deberta-v3-small",
     encoder_model: str = "BAAI/bge-small-en-v1.5",
     load_in_4bit: bool = False,
