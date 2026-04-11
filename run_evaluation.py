@@ -16,7 +16,7 @@ import sys
 from pathlib import Path
 
 from dataset import load_split, run_dataset_record, compute_metrics, log_summary
-from models.model_bundle import load_default_bundle
+from models.model_bundle import load_default_bundle, load_single_llm_bundle
 from modules.module4_targeted_retrieval import DenseRetriever
 
 logging.basicConfig(
@@ -41,6 +41,7 @@ def main():
     parser.add_argument("--use-rationale-hints", action="store_true", help="Inject gold rationale to guide reasoning.")
     parser.add_argument("--output", type=str, default="evaluation_results.json", help="Path to save results JSON.")
     parser.add_argument("--4bit", action="store_true", dest="load_in_4bit", help="Load generative LLMs in 4-bit precision.")
+    parser.add_argument("--single-model", action="store_true", help="Use a single shared LLM across all roles to save VRAM.")
     
     args = parser.parse_args()
     
@@ -68,7 +69,12 @@ def main():
         # Ensure imports and model initializations run appropriately
         import torch
         logger.info(f"CUDA available: {torch.cuda.is_available()}")
-        bundle = load_default_bundle(load_in_4bit=args.load_in_4bit)
+        
+        if args.single_model:
+            bundle = load_single_llm_bundle(load_in_4bit=args.load_in_4bit)
+        else:
+            bundle = load_default_bundle(load_in_4bit=args.load_in_4bit)
+            
         retriever = DenseRetriever(bundle.encoder)
         
     results = []
