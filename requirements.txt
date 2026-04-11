@@ -1,0 +1,22 @@
+# Core deep learning
+torch>=2.2.0
+torchvision>=0.17.0
+
+# HuggingFace ecosystem
+transformers>=4.40.0
+accelerate>=0.29.0
+tokenizers>=0.19.0
+huggingface-hub>=0.22.0
+
+# Optional: 4-bit quantisation (recommended for 7B+ models on consumer GPUs)
+bitsandbytes>=0.43.0
+
+# Data schemas and validation
+pydantic>=2.6.0
+
+# Image handling (for keyframe loading)
+Pillow>=10.0.0
+
+# Utilities
+sentencepiece>=0.2.0     # required by some tokenizers (LLaMA, Mistral)
+protobuf>=4.25.0         # required by sentencepiece
