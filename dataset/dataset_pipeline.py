@@ -262,8 +262,7 @@ def run_dataset_record(
     inputs = record_to_pipeline_inputs(record, keyframe_paths=keyframe_paths)
 
     # Index the record-specific evidence corpus so dynamic retrieval (Modules 4 & 5) works
-    if inputs.initial_evidence:
-        retriever.index(list(inputs.initial_evidence))
+    retriever.index(list(inputs.initial_evidence))
 
     report = run_dataset_pipeline(
         inputs=inputs,

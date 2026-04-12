@@ -164,7 +164,7 @@ Given one intermediate reasoning answer and its supporting evidence IDs,
 write exactly one plain-language sentence that a non-expert could read.
 Do not use jargon. Do not start with "I".
 
-Respond ONLY with valid JSON — no markdown fences, no preamble:
+You MUST respond strictly with the following JSON format and nothing else. Do not provide any conversational text before or after the JSON:
 { "summary": "<one sentence>" }"""
 
 
@@ -173,7 +173,7 @@ def _build_summary_prompt(hop: HopResult) -> list[dict[str, str]]:
         f'Hop {hop.hop}: Q: "{hop.question}"\n'
         f'Answer: "{hop.answer}" (confidence: {hop.confidence:.2f})\n'
         f"Supporting evidence: {hop.supported_by}\n\n"
-        "Summarise in one sentence."
+        "Summarise in one sentence. Output ONLY valid JSON. Start your response with { and end with }."
     )
     return [
         {"role": "system", "content": _SUMMARY_SYSTEM_PROMPT},

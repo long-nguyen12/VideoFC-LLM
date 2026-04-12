@@ -63,6 +63,10 @@ class DenseRetriever:
     def index(self, passages: list[EvidenceRef]) -> None:
         """Encode and store a corpus of passages."""
         self._passages = passages
+        if not passages:
+            self._embeddings = None
+            logger.debug("DenseRetriever: index cleared (0 passages).")
+            return
         texts = [p.passage_text for p in passages]
         self._embeddings = self.encoder.encode(texts)   # (N, D)
         logger.info("DenseRetriever: indexed %d passages.", len(passages))
@@ -73,7 +77,7 @@ class DenseRetriever:
         New passages get fresh UUIDs and hop_ids=[].
         """
         if self._embeddings is None or len(self._passages) == 0:
-            logger.warning("DenseRetriever.search called on empty index.")
+            logger.debug("DenseRetriever.search called on empty index.")
             return []
 
         q_emb = self.encoder.encode([query])                       # (1, D)
