@@ -49,7 +49,7 @@ You receive one atomic sub-question, optionally an answer from a previous hop,
 and a set of retrieved evidence passages.
 Produce a concise intermediate answer (≤ 2 sentences) with citations.
 
-Respond ONLY with valid JSON — no markdown fences, no preamble:
+You MUST respond strictly with the following JSON format and nothing else. Do not provide any conversational text before or after the JSON:
 {
   "hop": <integer>,
   "question": "<string>",
@@ -90,7 +90,7 @@ def _build_hop_prompt(
         f'Sub-question (hop {sq.hop}): "{sq.question}"\n'
         f"{prior_text}"
         f"Retrieved passages:\n{_format_passages(passages)}\n\n"
-        "Answer concisely."
+        "Answer concisely. Output ONLY valid JSON. Start your response with { and end with }."
     )
     return [
         {"role": "system", "content": _HOP_SYSTEM_PROMPT},

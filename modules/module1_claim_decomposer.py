@@ -41,7 +41,7 @@ into an ordered list of atomic sub-questions. Each sub-question must be:
 - ordered so that earlier answers can condition later questions
 - Produce at most {max_sub_questions} sub-questions.
 
-Respond ONLY with valid JSON — no markdown fences, no preamble:
+You MUST respond strictly with the following JSON format and nothing else. Do not provide any conversational text before or after the JSON:
 {{
   "claim_id": "<string>",
   "sub_questions": [
@@ -73,7 +73,7 @@ def _build_user_message(
         f'Transcript: "{transcript_excerpt[:200]}"\n'
         f"Conflict flag: {conflict_flag}\n"
         f"{hint_block}\n"
-        "Decompose this claim."
+        "Decompose this claim. Output ONLY valid JSON. Start your response with { and end with }."
     )
 
 
