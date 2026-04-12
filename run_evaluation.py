@@ -39,11 +39,18 @@ def main():
     parser.add_argument("--max-records", type=int, default=None, help="Limit number of records (for testing).")
     parser.add_argument("--use-stubs", action="store_true", help="Use stubbed models to bypass GPU inference.")
     parser.add_argument("--use-rationale-hints", action="store_true", help="Inject gold rationale to guide reasoning.")
-    parser.add_argument("--output", type=str, default="evaluation_results.json", help="Path to save results JSON.")
+    parser.add_argument("--output", type=str, default=None, help="Path to save results JSON. If omitted, auto-generates a timestamped filename.")
     parser.add_argument("--4bit", action="store_true", dest="load_in_4bit", help="Load generative LLMs in 4-bit precision.")
     parser.add_argument("--single-model", action="store_true", help="Use a single shared LLM across all roles to save VRAM.")
     
     args = parser.parse_args()
+    
+    if args.output:
+        out_path = Path(args.output)
+    else:
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        out_path = Path(f"evaluation_{args.split}_{timestamp}.json")
     
     logger.info(f"Loading '{args.split}' split from {args.dataset_root}...")
     try:
@@ -98,6 +105,25 @@ def main():
             is_correct = "✓" if result.correct else "✗"
             logger.info(f"  -> Pred: {result.pred_verdict:<22} Gold: {result.gold_verdict:<22} {is_correct}")
             
+            # Auto-save incrementally so results are never lost on crash
+            partial_summary = compute_metrics(results)
+            with open(out_path, "w", encoding="utf-8") as f:
+                json.dump({
+                    "summary": partial_summary.to_dict(),
+                    "args": vars(args),
+                    "status": f"In progress ({i}/{len(records)})",
+                    "results": [
+                        {
+                            "claim_id": r.claim_id,
+                            "pred_verdict": r.pred_verdict,
+                            "gold_verdict": r.gold_verdict,
+                            "correct": r.correct,
+                            "report": r.report.model_dump()
+                        }
+                        for r in results
+                    ]
+                }, f, indent=2)
+            
         except Exception as e:
             logger.error(f"Failed to process record {vid}: {e}", exc_info=True)
             
@@ -115,13 +141,11 @@ def main():
     print(str(summary))
     print("=" * 60 + "\n")
     
-    # Save to JSON
-    out_path = Path(args.output)
-    
-    # Dump full reports
+    # Final dump updates the status to Completed
     full_output = {
         "summary": summary.to_dict(),
         "args": vars(args),
+        "status": "Completed",
         "results": [
             {
                 "claim_id": r.claim_id,
@@ -133,11 +157,10 @@ def main():
             for r in results
         ]
     }
-    
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(full_output, f, indent=2)
         
-    logger.info(f"Saved detailed results and summary to {out_path.absolute()}")
+    logger.info(f"Finished evaluating {len(results)} records. Results saved to {out_path.absolute()}")
 
 if __name__ == "__main__":
     main()
