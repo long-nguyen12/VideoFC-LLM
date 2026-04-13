@@ -164,8 +164,25 @@ Given one intermediate reasoning answer and its supporting evidence IDs,
 write exactly one plain-language sentence that a non-expert could read.
 Do not use jargon. Do not start with "I".
 
-You MUST respond strictly with the following JSON format and nothing else. Do not provide any conversational text before or after the JSON:
-{ "summary": "<one sentence>" }"""
+OUTPUT FORMAT RULES (MANDATORY):
+1. Respond ONLY with a valid JSON object. Do not include markdown, code blocks, explanations, greetings, or any text outside the JSON.
+2. Use double quotes for ALL keys and string values. Single quotes are invalid JSON and will cause parsing errors.
+3. Ensure proper JSON escaping for special characters (e.g., \\", \\\\, \\n).
+4. Do not include trailing commas, comments, or schema annotations in the output.
+5. The "summary" field must contain exactly one plain-language sentence, under 30 words, with no jargon.
+6. Do not start the summary with "I", "The model", or any self-referential phrase.
+
+REQUIRED JSON SCHEMA:
+{{
+  "summary": "<string, exactly one sentence, under 30 words, plain language>"
+}}
+
+INPUT:
+Intermediate Answer: {intermediate_answer}
+Supporting Evidence IDs: {evidence_ids}
+
+OUTPUT (JSON ONLY):
+"""
 
 
 def _build_summary_prompt(hop: HopResult) -> list[dict[str, str]]:

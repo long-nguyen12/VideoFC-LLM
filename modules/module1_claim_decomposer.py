@@ -41,9 +41,16 @@ into an ordered list of atomic sub-questions. Each sub-question must be:
 - ordered so that earlier answers can condition later questions
 - Produce at most {max_sub_questions} sub-questions.
 
-You MUST respond strictly with the following JSON format and nothing else. Do not provide any conversational text before or after the JSON:
+OUTPUT FORMAT RULES (MANDATORY):
+1. Respond ONLY with a valid JSON object. Do not include markdown, code blocks, explanations, greetings, or any text outside the JSON.
+2. Use double quotes for ALL keys and string values. Single quotes are invalid JSON and will cause parsing errors.
+3. Ensure proper JSON escaping for special characters (e.g., \\", \\\\, \\n).
+4. Do not include trailing commas, comments, or schema annotations in the output.
+5. If decomposition is impossible or input is ambiguous, return: {{"claim_id": null, "sub_questions": [], "error": "brief reason"}}
+
+REQUIRED JSON SCHEMA:
 {{
-  "claim_id": "<string>",
+  "claim_id": "<string or null>",
   "sub_questions": [
     {{
       "hop": <integer starting at 1>,
@@ -52,7 +59,15 @@ You MUST respond strictly with the following JSON format and nothing else. Do no
       "evidence_type": "video" | "web" | "kb" | "any"
     }}
   ]
-}}"""
+}}
+
+INPUT:
+Claim ID: {claim_id}
+Composite Claim: {composite_claim}
+Video Context Summary: {video_context_summary}
+
+OUTPUT (JSON ONLY):
+"""
 
 
 def _build_user_message(

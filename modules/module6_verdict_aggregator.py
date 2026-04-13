@@ -51,16 +51,42 @@ _AGGREGATOR_SYSTEM_PROMPT = """\
 You are a fact-checking verdict aggregator.
 Given a claim, hop answers, a cross-modal conflict report, and evidence gate status, produce a verdict.
 
-You MUST respond strictly with the following JSON format and nothing else. Do not provide any conversational text before or after the JSON:
-{
+OUTPUT FORMAT RULES (MANDATORY):
+1. Respond ONLY with a valid JSON object. Do not include markdown, code blocks, explanations, greetings, or any text outside the JSON.
+2. Use double quotes for ALL keys and string values. Single quotes are invalid JSON and will cause parsing errors.
+3. Ensure proper JSON escaping for special characters (e.g., \\", \\\\, \\n).
+4. Do not include trailing commas, comments, or schema annotations in the output.
+5. The "reasoning_trace" array must contain at most 3 steps. Each "finding" must be under 20 words.
+6. The "counterfactual" field must contain exactly one sentence.
+7. The "verdict" field must be exactly one of: "supported", "refuted", "insufficient_evidence", or "misleading_context".
+8. The "confidence" field must be a float between 0.0 and 1.0, inclusive.
+
+REQUIRED JSON SCHEMA:
+{{
   "claim_id": "<string>",
-  "verdict": "supported" | "refuted" | "insufficient_evidence" | "misleading_context",
-  "confidence": <float 0.0–1.0>,
-  "reasoning_trace": [{"step": <int>, "finding": "<string>", "source_hop": <int|null>, "evidence_ids": ["<string>"]}],
-  "modal_conflict_used": <true|false>,
-  "counterfactual": "<one sentence>"
-}
-Keep reasoning_trace to at most 3 steps. Keep each finding under 20 words."""
+  "verdict": "<one of: supported | refuted | insufficient_evidence | misleading_context>",
+  "confidence": <float 0.0-1.0>,
+  "reasoning_trace": [
+    {{
+      "step": <integer starting at 1>,
+      "finding": "<string, under 20 words>",
+      "source_hop": <integer or null>,
+      "evidence_ids": ["<string>"]
+    }}
+  ],
+  "modal_conflict_used": <true | false>,
+  "counterfactual": "<string, exactly one sentence>"
+}}
+
+INPUT:
+Claim ID: {claim_id}
+Claim: {claim}
+Hop Answers: {hop_answers}
+Cross-Modal Conflict Report: {conflict_report}
+Evidence Gate Status: {evidence_gate_status}
+
+OUTPUT (JSON ONLY):
+"""
 
 
 def _format_hop_answers(hop_results: list[HopResult], max_hops: int = 4) -> str:

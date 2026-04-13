@@ -49,18 +49,35 @@ You receive one atomic sub-question, optionally an answer from a previous hop,
 and a set of retrieved evidence passages.
 Produce a concise intermediate answer (≤ 2 sentences) with citations.
 
-You MUST respond strictly with the following JSON format and nothing else. Do not provide any conversational text before or after the JSON:
-{
+OUTPUT FORMAT RULES (MANDATORY):
+1. Respond ONLY with a valid JSON object. Do not include markdown, code blocks, explanations, greetings, or any text outside the JSON.
+2. Use double quotes for ALL keys and string values. Single quotes are invalid JSON and will cause parsing errors.
+3. Ensure proper JSON escaping for special characters (e.g., \\", \\\\, \\n).
+4. Do not include trailing commas, comments, or schema annotations in the output.
+5. The "answer" field must contain at most 2 sentences. Keep it concise and factual.
+6. The "confidence" field must be a float between 0.0 and 1.0, inclusive.
+7. The "supported_by" field must be a list of evidence_id strings from the provided passages.
+8. Set "answer_unknown" to true ONLY if the passages genuinely do not contain sufficient information to answer the question. When true, "answer" should briefly state what is missing.
+
+REQUIRED JSON SCHEMA:
+{{
   "hop": <integer>,
   "question": "<string>",
   "answer": "<string, ≤ 2 sentences>",
   "confidence": <float 0.0–1.0>,
   "supported_by": ["<evidence_id>", ...],
   "answer_unknown": <true | false>
-}
+}}
 
-Set answer_unknown to true only if the passages genuinely do not contain
-sufficient information to answer the question."""
+INPUT:
+Hop Number: {hop}
+Question: {question}
+Previous Answer (if any): {previous_answer}
+Retrieved Evidence:
+{evidence_passages}
+
+OUTPUT (JSON ONLY):
+"""
 
 
 def _format_passages(passages: list[EvidenceRef]) -> str:
