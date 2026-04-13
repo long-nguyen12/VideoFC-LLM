@@ -544,7 +544,7 @@ class TestDatasetPipelineMaxSubQuestions:
         """decompose_claim must receive the max_sub_questions passed to run_dataset_pipeline."""
         from dataset.dataset_loader import DatasetLoader
         from dataset.dataset_adapter import record_to_pipeline_inputs
-        from dataset.dataset_pipeline import run_dataset_pipeline
+        from run_pipeline import run_dataset_pipeline
         from modules import decompose_claim as orig_decompose
 
         record = DatasetLoader.from_dict(self.RAW_RECORD)
@@ -568,7 +568,7 @@ class TestDatasetPipelineMaxSubQuestions:
     def test_run_dataset_pipeline_with_max_3(self):
         from dataset.dataset_loader import DatasetLoader
         from dataset.dataset_adapter import record_to_pipeline_inputs
-        from dataset.dataset_pipeline import run_dataset_pipeline
+        from run_pipeline import run_dataset_pipeline
         from schemas.data_models import ExplainabilityReport
 
         record = DatasetLoader.from_dict(self.RAW_RECORD)
@@ -589,7 +589,7 @@ class TestDatasetPipelineMaxSubQuestions:
     def test_run_dataset_record_single_model_mode(self):
         """Convenience check: run_dataset_record works end-to-end with max_sub_questions=3."""
         from dataset.dataset_loader import DatasetLoader
-        from dataset.dataset_pipeline import run_dataset_record
+        from run_pipeline import run_dataset_record
 
         record = DatasetLoader.from_dict(self.RAW_RECORD)
         bundle = self._make_stub_bundle(max_sub=3)
@@ -597,7 +597,7 @@ class TestDatasetPipelineMaxSubQuestions:
 
         # run_dataset_record does not expose max_sub_questions directly,
         # so we patch run_dataset_pipeline to verify it is called correctly
-        from dataset import dataset_pipeline as dp
+        from . import dataset_pipeline as dp
         original_run = dp.run_dataset_pipeline
         captured_kwargs = {}
 

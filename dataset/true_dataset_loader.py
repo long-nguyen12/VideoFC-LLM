@@ -361,7 +361,7 @@ def run_pipeline_evaluation(
     >>> accuracy = sum(r.correct for r in results) / len(results)
     """
     # Lazy import to avoid circular dependencies at module level
-    from dataset.dataset_pipeline import (
+    from run_pipeline import (
         run_dataset_record,
         DatasetEvalResult,
     )  # noqa: F811

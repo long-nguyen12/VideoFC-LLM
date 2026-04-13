@@ -568,7 +568,7 @@ class TestDatasetPipeline:
 
     def test_synthetic_caption_used_when_no_keyframes(self, dataset_record):
         from dataset.dataset_adapter import record_to_pipeline_inputs
-        from dataset.dataset_pipeline import run_dataset_pipeline
+        from run_pipeline import run_dataset_pipeline
 
         inputs = record_to_pipeline_inputs(dataset_record)
         assert inputs.segment.keyframes == []   # no frames in dataset
@@ -584,7 +584,7 @@ class TestDatasetPipeline:
 
     def test_vlm_called_when_keyframes_present(self, dataset_record):
         from dataset.dataset_adapter import record_to_pipeline_inputs
-        from dataset.dataset_pipeline import run_dataset_pipeline
+        from run_pipeline import run_dataset_pipeline
 
         inputs = record_to_pipeline_inputs(dataset_record, keyframe_paths=["f.jpg"])
         bundle = self._make_stub_bundle()
@@ -595,7 +595,7 @@ class TestDatasetPipeline:
 
     def test_rationale_hint_injected_into_decomposer(self, dataset_record):
         from dataset.dataset_adapter import record_to_pipeline_inputs
-        from dataset.dataset_pipeline import run_dataset_pipeline
+        from run_pipeline import run_dataset_pipeline
 
         inputs = record_to_pipeline_inputs(dataset_record)
         bundle = self._make_stub_bundle()
@@ -612,7 +612,7 @@ class TestDatasetPipeline:
 
     def test_rationale_hint_omitted_when_disabled(self, dataset_record):
         from dataset.dataset_adapter import record_to_pipeline_inputs
-        from dataset.dataset_pipeline import run_dataset_pipeline
+        from run_pipeline import run_dataset_pipeline
 
         inputs = record_to_pipeline_inputs(dataset_record)
         bundle = self._make_stub_bundle()
@@ -627,7 +627,7 @@ class TestDatasetPipeline:
         assert "Known rationale context" not in user_content
 
     def test_run_dataset_record_returns_eval_result(self, dataset_record):
-        from dataset.dataset_pipeline import run_dataset_record
+        from run_pipeline import run_dataset_record
 
         bundle = self._make_stub_bundle()
         retriever = self._make_stub_retriever()
@@ -643,7 +643,7 @@ class TestDatasetPipeline:
         assert result.report is not None
 
     def test_correct_flag_set_properly(self, dataset_record):
-        from dataset.dataset_pipeline import run_dataset_record
+        from run_pipeline import run_dataset_record
 
         bundle = self._make_stub_bundle()
         retriever = self._make_stub_retriever()
@@ -660,7 +660,7 @@ class TestEvaluation:
 
     def _make_result(self, gold_verdict, pred_verdict, confidence=0.8):
         """Build a minimal DatasetEvalResult stub."""
-        from dataset.dataset_pipeline import DatasetEvalResult
+        from run_pipeline import DatasetEvalResult
         from dataset.label_mapper import verdict_to_label
         from schemas.data_models import ExplainabilityReport
 

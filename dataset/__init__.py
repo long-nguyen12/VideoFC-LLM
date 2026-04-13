@@ -35,7 +35,7 @@ from .dataset_adapter import (
     PipelineInputs,
     RationaleContext,
 )
-from .dataset_pipeline import (
+from ..run_pipeline import (
     run_dataset_pipeline,
     run_dataset_record,
     DatasetEvalResult,
