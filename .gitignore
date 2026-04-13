@@ -1,1 +1,12 @@
 data/
+dataset/__pycache__/
+
+models/__pycache__/
+
+*.pyc
+
+simplified/
+
+simplified_pipeline.py
+
+walkthrough.md
