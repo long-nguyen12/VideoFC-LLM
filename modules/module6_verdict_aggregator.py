@@ -27,7 +27,6 @@ from __future__ import annotations
 import json
 import logging
 import re
-from typing import Any
 
 from schemas import (
     ClaimDecomposition,
@@ -39,6 +38,7 @@ from schemas import (
     VideoSegment,
 )
 from models import GenerativeLLM
+from modules.utils import safe_json_parse as _safe_json_parse
 
 logger = logging.getLogger(__name__)
 
@@ -77,15 +77,6 @@ REQUIRED JSON SCHEMA:
   "modal_conflict_used": <true | false>,
   "counterfactual": "<string, exactly one sentence>"
 }}
-
-INPUT:
-Claim ID: {claim_id}
-Claim: {claim}
-Hop Answers: {hop_answers}
-Cross-Modal Conflict Report: {conflict_report}
-Evidence Gate Status: {evidence_gate_status}
-
-OUTPUT (JSON ONLY):
 """
 
 
@@ -136,18 +127,7 @@ def _build_aggregator_prompt(
     ]
 
 
-# ---------------------------------------------------------------------------
-# JSON parsing
-# ---------------------------------------------------------------------------
-
-def _safe_json_parse(raw: str) -> dict[str, Any]:
-    cleaned = re.sub(r"^```(?:json)?\s*", "", raw.strip(), flags=re.IGNORECASE)
-    cleaned = re.sub(r"\s*```$", "", cleaned.strip())
-    start = cleaned.find("{")
-    end   = cleaned.rfind("}") + 1
-    if start == -1 or end == 0:
-        raise ValueError(f"No JSON found in aggregator output: {raw[:300]}")
-    return json.loads(cleaned[start:end])
+# JSON parsing — shared implementation lives in modules/utils.py
 
 
 # ---------------------------------------------------------------------------

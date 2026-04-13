@@ -20,10 +20,10 @@ from __future__ import annotations
 import json
 import logging
 import re
-from typing import Any
 
 from schemas import ClaimDecomposition, SubQuestion, VideoSegment
 from models import GenerativeLLM
+from modules.utils import safe_json_parse as _safe_json_parse
 
 logger = logging.getLogger(__name__)
 
@@ -60,13 +60,6 @@ REQUIRED JSON SCHEMA:
     }}
   ]
 }}
-
-INPUT:
-Claim ID: {claim_id}
-Composite Claim: {composite_claim}
-Video Context Summary: {video_context_summary}
-
-OUTPUT (JSON ONLY):
 """
 
 
@@ -118,25 +111,7 @@ def _build_prompt(
     ]
 
 
-# ---------------------------------------------------------------------------
-# JSON parsing
-# ---------------------------------------------------------------------------
-
-def _safe_json_parse(raw: str) -> dict[str, Any]:
-    """
-    Robustly extract a JSON object from the model output.
-    Strips markdown code fences if present.
-    """
-    # Remove ```json ... ``` or ``` ... ``` wrappers
-    cleaned = re.sub(r"^```(?:json)?\s*", "", raw.strip(), flags=re.IGNORECASE)
-    cleaned = re.sub(r"\s*```$", "", cleaned.strip())
-    # Find the first '{' ... last '}' in case there is surrounding text
-    start = cleaned.find("{")
-    end = cleaned.rfind("}") + 1
-    if start == -1 or end == 0:
-        raise ValueError(f"No JSON object found in model output:\n{raw}")
-    return json.loads(cleaned[start:end])
-
+# JSON parsing — shared implementation lives in modules/utils.py
 
 # ---------------------------------------------------------------------------
 # Public API

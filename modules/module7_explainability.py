@@ -35,7 +35,6 @@ from __future__ import annotations
 import json
 import logging
 import re
-from typing import Any
 
 from schemas import (
     EvidenceRef,
@@ -48,6 +47,7 @@ from schemas import (
     VideoSegment,
 )
 from models import GenerativeLLM, NLIScorer
+from modules.utils import safe_json_parse as _safe_json_parse
 
 logger = logging.getLogger(__name__)
 
@@ -156,56 +156,7 @@ def build_modal_annotations(
 
 # ---------------------------------------------------------------------------
 # 3. Hop summaries
-# ---------------------------------------------------------------------------
-
-_SUMMARY_SYSTEM_PROMPT = """\
-You are an explainability assistant for a video fact-checking system.
-Given one intermediate reasoning answer and its supporting evidence IDs,
-write exactly one plain-language sentence that a non-expert could read.
-Do not use jargon. Do not start with "I".
-
-OUTPUT FORMAT RULES (MANDATORY):
-1. Respond ONLY with a valid JSON object. Do not include markdown, code blocks, explanations, greetings, or any text outside the JSON.
-2. Use double quotes for ALL keys and string values. Single quotes are invalid JSON and will cause parsing errors.
-3. Ensure proper JSON escaping for special characters (e.g., \\", \\\\, \\n).
-4. Do not include trailing commas, comments, or schema annotations in the output.
-5. The "summary" field must contain exactly one plain-language sentence, under 30 words, with no jargon.
-6. Do not start the summary with "I", "The model", or any self-referential phrase.
-
-REQUIRED JSON SCHEMA:
-{{
-  "summary": "<string, exactly one sentence, under 30 words, plain language>"
-}}
-
-INPUT:
-Intermediate Answer: {intermediate_answer}
-Supporting Evidence IDs: {evidence_ids}
-
-OUTPUT (JSON ONLY):
-"""
-
-
-def _build_summary_prompt(hop: HopResult) -> list[dict[str, str]]:
-    user_content = (
-        f'Hop {hop.hop}: Q: "{hop.question}"\n'
-        f'Answer: "{hop.answer}" (confidence: {hop.confidence:.2f})\n'
-        f"Supporting evidence: {hop.supported_by}\n\n"
-        "Summarise in one sentence. Output ONLY valid JSON. Start your response with { and end with }."
-    )
-    return [
-        {"role": "system", "content": _SUMMARY_SYSTEM_PROMPT},
-        {"role": "user",   "content": user_content},
-    ]
-
-
-def _safe_json_parse(raw: str) -> dict[str, Any]:
-    cleaned = re.sub(r"^```(?:json)?\s*", "", raw.strip(), flags=re.IGNORECASE)
-    cleaned = re.sub(r"\s*```$", "", cleaned.strip())
-    start = cleaned.find("{")
-    end   = cleaned.rfind("}") + 1
-    if start == -1 or end == 0:
-        raise ValueError(f"No JSON found in: {raw[:200]}")
-    return json.loads(cleaned[start:end])
+# JSON parsing — shared implementation lives in modules/utils.py
 
 
 def generate_hop_summaries(

@@ -24,7 +24,6 @@ from __future__ import annotations
 import json
 import logging
 import re
-from typing import Any
 
 from schemas import (
     ClaimDecomposition,
@@ -35,6 +34,7 @@ from schemas import (
 )
 from models import GenerativeLLM
 from modules.module4_targeted_retrieval import DenseRetriever, build_retrieval_query
+from modules.utils import safe_json_parse as _safe_json_parse
 
 logger = logging.getLogger(__name__)
 
@@ -68,15 +68,6 @@ REQUIRED JSON SCHEMA:
   "supported_by": ["<evidence_id>", ...],
   "answer_unknown": <true | false>
 }}
-
-INPUT:
-Hop Number: {hop}
-Question: {question}
-Previous Answer (if any): {previous_answer}
-Retrieved Evidence:
-{evidence_passages}
-
-OUTPUT (JSON ONLY):
 """
 
 
@@ -115,18 +106,7 @@ def _build_hop_prompt(
     ]
 
 
-# ---------------------------------------------------------------------------
-# JSON parsing
-# ---------------------------------------------------------------------------
-
-def _safe_json_parse(raw: str) -> dict[str, Any]:
-    cleaned = re.sub(r"^```(?:json)?\s*", "", raw.strip(), flags=re.IGNORECASE)
-    cleaned = re.sub(r"\s*```$", "", cleaned.strip())
-    start = cleaned.find("{")
-    end   = cleaned.rfind("}") + 1
-    if start == -1 or end == 0:
-        raise ValueError(f"No JSON found in: {raw[:200]}")
-    return json.loads(cleaned[start:end])
+# JSON parsing — shared implementation lives in modules/utils.py
 
 
 # ---------------------------------------------------------------------------

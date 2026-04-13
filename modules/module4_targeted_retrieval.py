@@ -19,7 +19,6 @@ Output : (list[EvidenceRef], EvidenceStrengthReport)
 from __future__ import annotations
 
 import logging
-import uuid
 from dataclasses import dataclass, field
 
 import torch
