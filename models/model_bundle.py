@@ -33,6 +33,9 @@ from transformers import (
     LlavaNextProcessor,
     AutoModelForCausalLM,
 )
+from transformers import logging as transformers_logging
+
+transformers_logging.set_verbosity_error()
 
 logger = logging.getLogger(__name__)
 
