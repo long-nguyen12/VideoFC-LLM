@@ -98,7 +98,14 @@ class VisualCaptioner:
             ]
             text = self.processor.apply_chat_template(conversation, add_generation_prompt=True, tokenize=False)
             inputs = self.processor(images=[image], text=[text], padding=True, return_tensors="pt").to(self.device)
-            output_ids = self.model.generate(**inputs, max_new_tokens=128, do_sample=False)
+            output_ids = self.model.generate(
+                **inputs, 
+                max_new_tokens=128, 
+                do_sample=False,
+                temperature=None,
+                top_p=None,
+                top_k=None,
+            )
             # Strip the input tokens from the output
             generated = output_ids[0, inputs["input_ids"].shape[1]:]
             captions.append(self.processor.decode(generated, skip_special_tokens=True).strip())
@@ -291,13 +298,19 @@ class GenerativeLLM:
         input_len = inputs["input_ids"].shape[1]
 
         effective_max = min(max_new_tokens, self.max_new_tokens_cap)
-        output_ids = self.model.generate(
-            **inputs,
-            max_new_tokens=effective_max,
-            do_sample=do_sample,
-            temperature=temperature if do_sample else 1.0,
-            pad_token_id=self.tokenizer.pad_token_id,
-        )
+        kwargs = {
+            "max_new_tokens": effective_max,
+            "do_sample": do_sample,
+            "pad_token_id": self.tokenizer.pad_token_id,
+        }
+        if do_sample:
+            kwargs["temperature"] = temperature
+        else:
+            kwargs["temperature"] = None
+            kwargs["top_p"] = None
+            kwargs["top_k"] = None
+
+        output_ids = self.model.generate(**inputs, **kwargs)
         generated = output_ids[0, input_len:]
         return self.tokenizer.decode(generated, skip_special_tokens=True).strip()
 
