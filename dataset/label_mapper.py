@@ -1,45 +1,3 @@
-"""
-dataset/label_mapper.py
-------------------------
-Maps Snopes-style rating strings to the pipeline's four-class verdict space
-and to integer label indices for training / evaluation.
-
-Snopes rating taxonomy (observed in the wild)
----------------------------------------------
-Positive / True family
-  "True"
-  "Mostly True"
-
-Contextual / nuanced family
-  "Mixture"
-  "Outdated"
-  "Unproven"
-  "Correct Attribution"
-  "Miscaptioned"
-
-Negative / False family
-  "False"
-  "Mostly False"
-  "Labeled Satire"
-
-Ambiguous / unknown
-  "Unrated"
-  "Research In Progress"
-
-Pipeline verdict space
-----------------------
-  "supported"              ← claim is corroborated by evidence
-  "refuted"                ← claim is clearly contradicted by evidence
-  "misleading_context"     ← claim is partially true but decontextualised
-  "insufficient_evidence"  ← cannot determine; evidence gate failed or label unknown
-
-Label index mapping (for classification head training)
-  0 → supported
-  1 → refuted
-  2 → misleading_context
-  3 → insufficient_evidence
-"""
-
 from __future__ import annotations
 
 # ---------------------------------------------------------------------------
@@ -49,32 +7,22 @@ from __future__ import annotations
 # Maps normalised (lower-cased, stripped) Snopes rating → pipeline verdict
 _RATING_TO_VERDICT: dict[str, str] = {
     # Clearly true
-    "true":                    "supported",
-    "mostly true":             "supported",
-    "correct attribution":     "supported",
-
+    "true": "true",
+    "mostly true": "true",
+    "correct attribution": "true",
     # Clearly false
-    "false":                   "refuted",
-    "mostly false":            "refuted",
-    "labeled satire":          "refuted",
-
+    "false": "false",
+    "mostly false": "false",
     # Nuanced / misleading-context cases
-    "mixture":                 "misleading_context",
-    "outdated":                "misleading_context",
-    "miscaptioned":            "misleading_context",
-
-    # Ambiguous / cannot determine
-    "unproven":                "insufficient_evidence",
-    "unrated":                 "insufficient_evidence",
-    "research in progress":    "insufficient_evidence",
+    "mixture": "false",
+    "outdated": "false",
+    "fake": "false",
 }
 
 # Integer label index used for classification
 VERDICT_TO_LABEL: dict[str, int] = {
-    "supported":             0,
-    "refuted":               1,
-    "misleading_context":    2,
-    "insufficient_evidence": 3,
+    "true": 0,
+    "false": 1,
 }
 
 LABEL_TO_VERDICT: dict[int, str] = {v: k for k, v in VERDICT_TO_LABEL.items()}
@@ -83,16 +31,15 @@ NUM_LABELS: int = len(VERDICT_TO_LABEL)
 
 # Human-readable display labels (used in reports / UI)
 VERDICT_DISPLAY: dict[str, str] = {
-    "supported":             "Supported",
-    "refuted":               "Refuted",
-    "misleading_context":    "Misleading Context",
-    "insufficient_evidence": "Insufficient Evidence",
+    "true": "True",
+    "false": "False",
 }
 
 
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def rating_to_verdict(rating: str) -> str:
     """
@@ -109,12 +56,12 @@ def rating_to_verdict(rating: str) -> str:
     -------
     str  One of the four pipeline verdict labels.
     """
-    return _RATING_TO_VERDICT.get(rating.lower().strip(), "insufficient_evidence")
+    return _RATING_TO_VERDICT.get(rating.lower().strip())
 
 
 def verdict_to_label(verdict: str) -> int:
     """Return the integer class index for a pipeline verdict string."""
-    return VERDICT_TO_LABEL.get(verdict, VERDICT_TO_LABEL["insufficient_evidence"])
+    return VERDICT_TO_LABEL.get(verdict)
 
 
 def rating_to_label(rating: str) -> int:
@@ -124,7 +71,7 @@ def rating_to_label(rating: str) -> int:
 
 def label_to_verdict(label: int) -> str:
     """Return the pipeline verdict string for an integer label index."""
-    return LABEL_TO_VERDICT.get(label, "insufficient_evidence")
+    return LABEL_TO_VERDICT.get(label)
 
 
 def all_ratings() -> list[str]:
@@ -139,9 +86,7 @@ def verdict_confidence_floor(verdict: str) -> float:
     (e.g. when gold labels are available for training signal).
     """
     floors = {
-        "supported":             0.70,
-        "refuted":               0.70,
-        "misleading_context":    0.55,   # harder to be confident about
-        "insufficient_evidence": 0.0,    # no floor — always uncertain
+        "true": 0.70,
+        "false": 0.70,
     }
     return floors.get(verdict, 0.0)
