@@ -187,8 +187,8 @@ def resolve_keyframe_path(claim_id: str, data_path: str = DATA_PATH) -> list[str
         return []
     root = Path(data_path)
     candidates = [
-        root / "train_val_output" / claim_id / claim_id,
-        root / "test_output"      / claim_id / claim_id,
+        root / "train_val_output" / claim_id ,
+        root / "test_output"      / claim_id ,
     ]
     for path in candidates:
         print(f"Checking path: {path} (exists={path.exists()})")
