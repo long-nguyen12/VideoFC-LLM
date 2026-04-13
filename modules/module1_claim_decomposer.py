@@ -166,8 +166,11 @@ def decompose_claim(
     last_exc: Exception | None = None
     for attempt in range(max_retries + 1):
         try:
+            print("DEBUG: Prompt for Claim Decomposition:\n", json.dumps(prompt, indent=2))  # Debug print
             raw = llm.generate(prompt, max_new_tokens=512)
+            print("DEBUG: Raw LLM output:\n", raw)  # Debug print
             data = _safe_json_parse(raw)
+            print("DEBUG: Parsed JSON data:\n", json.dumps(data, indent=2))  # Debug print
 
             sub_questions = [
                 SubQuestion(
