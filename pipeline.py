@@ -82,6 +82,7 @@ def run_pipeline(
     # ------------------------------------------------------------------
     logger.info("[1/7] Visual captioning")
     visual_caption: str = models.caption_fn(segment.keyframes)
+    print("DEBUG: Visual caption:\n", visual_caption)  # Debug print
     logger.debug("Visual caption: %s", visual_caption[:120])
 
     # ------------------------------------------------------------------

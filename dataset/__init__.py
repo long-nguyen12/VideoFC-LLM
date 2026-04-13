@@ -9,6 +9,8 @@ Public surface
   DatasetLoader            — lazy file iterator (JSONL / JSON)
   DirectoryLoader          — lazy directory iterator (per-record JSON files)
   load_split               — load train_val / test using dataset split files
+  load_for_pipeline        — load records + keyframe paths for LLM pipeline
+  run_pipeline_evaluation  — run the full LLM pipeline on a dataset split
   record_to_pipeline_inputs— converts a record into all pipeline inputs
   PipelineInputs           — typed container for pipeline inputs
   RationaleContext         — gold rationale data for prompt injection
@@ -23,6 +25,7 @@ Public surface
 
 from .dataset_schemas import DatasetRecord
 from .dataset_loader import DatasetLoader, DirectoryLoader, split_records, load_split
+from .true_dataset_loader import load_for_pipeline, run_pipeline_evaluation
 from .dataset_adapter import (
     record_to_pipeline_inputs,
     record_to_segment,
@@ -55,6 +58,8 @@ __all__ = [
     "DirectoryLoader",
     "split_records",
     "load_split",
+    "load_for_pipeline",
+    "run_pipeline_evaluation",
     "record_to_pipeline_inputs",
     "record_to_segment",
     "record_to_evidence",

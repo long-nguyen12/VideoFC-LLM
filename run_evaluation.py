@@ -15,7 +15,7 @@ import logging
 import sys
 from pathlib import Path
 
-from dataset import load_split, run_dataset_record, compute_metrics, log_summary
+from dataset import load_for_pipeline, run_dataset_record, compute_metrics, log_summary
 from models.model_bundle import load_default_bundle, load_single_llm_bundle
 from modules.module4_targeted_retrieval import DenseRetriever
 
@@ -54,17 +54,16 @@ def main():
     
     logger.info(f"Loading '{args.split}' split from {args.dataset_root}...")
     try:
-        records = load_split(
-            dataset_root=args.dataset_root,
+        items = load_for_pipeline(
+            path=args.dataset_root,
             split=args.split,
-            max_records=args.max_records,
-            skip_errors=True
+            limit_samples=args.max_records,
         )
     except FileNotFoundError as e:
         logger.error(f"Failed to load dataset: {e}")
         sys.exit(1)
         
-    if not records:
+    if not items:
         logger.warning("No records loaded. Exiting.")
         sys.exit(0)
         
@@ -86,10 +85,10 @@ def main():
         
     results = []
     
-    logger.info(f"Starting evaluation loop over {len(records)} records...")
-    for i, record in enumerate(records, 1):
+    logger.info(f"Starting evaluation loop over {len(items)} records...")
+    for i, (record, kf_paths) in enumerate(items, 1):
         vid = record.video_information.video_id
-        logger.info(f"Processing [{i}/{len(records)}] video_id={vid}...")
+        logger.info(f"Processing [{i}/{len(items)}] video_id={vid}...")
         
         try:
             # Note: run_dataset_record() internally indexes the record's specific evidence corpus 
@@ -98,7 +97,8 @@ def main():
                 record=record,
                 models=bundle,
                 retriever=retriever,
-                use_rationale_hints=args.use_rationale_hints
+                use_rationale_hints=args.use_rationale_hints,
+                keyframe_paths=kf_paths if kf_paths else None,
             )
             results.append(result)
             
@@ -111,7 +111,7 @@ def main():
                 json.dump({
                     "summary": partial_summary.to_dict(),
                     "args": vars(args),
-                    "status": f"In progress ({i}/{len(records)})",
+                    "status": f"In progress ({i}/{len(items)})",
                     "results": [
                         {
                             "claim_id": r.claim_id,
