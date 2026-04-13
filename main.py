@@ -87,6 +87,7 @@ def main():
     
     logger.info(f"Starting evaluation loop over {len(items)} records...")
     for i, (record, kf_paths) in enumerate(items, 1):
+        print(record)
         vid = record.video_information.video_id
         logger.info(f"Processing [{i}/{len(items)}] video_id={vid}...")
         print(f"DEBUG: kf_paths for {vid} from load_for_pipeline = {kf_paths}")
