@@ -191,8 +191,11 @@ def resolve_keyframe_path(claim_id: str, data_path: str = DATA_PATH) -> list[str
         root / "test_output"      / claim_id,
     ]
     for path in candidates:
+        print(f"Checking path: {path} (exists={path.exists()})")
         if path.exists():
-            frames = glob(str(path / "*.jpeg"))
+            search_pattern = str(path / "*.jpeg")
+            frames = glob(search_pattern)
+            print(f"Glob pattern {search_pattern} returned {len(frames)} frames: {frames}")
             if frames:
                 return sorted(frames)
     return []

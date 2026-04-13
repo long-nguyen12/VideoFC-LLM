@@ -89,6 +89,7 @@ def main():
     for i, (record, kf_paths) in enumerate(items, 1):
         vid = record.video_information.video_id
         logger.info(f"Processing [{i}/{len(items)}] video_id={vid}...")
+        print(f"DEBUG: kf_paths for {vid} from load_for_pipeline = {kf_paths}")
         
         try:
             # Note: run_dataset_record() internally indexes the record's specific evidence corpus 
