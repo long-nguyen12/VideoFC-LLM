@@ -82,7 +82,7 @@ class VisualCaptioner:
         self.model.eval()
 
     @torch.inference_mode()
-    def caption(self, keyframes: list[str], prompt: str = "Describe this image concisely.") -> str:
+    def caption(self, keyframes: list[str], prompt: str = "Can you describe what is happening in the video in detail?") -> str:
         """
         Caption a list of keyframes and return one aggregated description.
         For multi-frame segments the captions are concatenated with ' | '.
