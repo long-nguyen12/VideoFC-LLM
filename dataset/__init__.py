@@ -34,7 +34,7 @@ from .true_dataset_loader import (
     NUM_LABELS,
     VERDICT_DISPLAY,
 )
-from ..run_pipeline import (
+from run_pipeline import (
     run_dataset_pipeline,
     run_dataset_record,
     DatasetEvalResult,
