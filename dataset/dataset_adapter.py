@@ -82,7 +82,7 @@ class RationaleContext:
     additional_rationales: list[str] = field(default_factory=list)
     synthesized_rationale: str = ""
     detailed_reasons: list[str] = field(default_factory=list)
-    gold_verdict: str = "insufficient_evidence"
+    gold_verdict: str = None
     snopes_rating: str = ""
     snopes_url: str = ""
     article_content: str = ""

@@ -58,13 +58,13 @@ OUTPUT FORMAT RULES (MANDATORY):
 4. Do not include trailing commas, comments, or schema annotations in the output.
 5. The "reasoning_trace" array must contain at most 3 steps. Each "finding" must be under 20 words.
 6. The "counterfactual" field must contain exactly one sentence.
-7. The "verdict" field must be exactly one of: "supported", "refuted", "insufficient_evidence", or "misleading_context".
+7. The "verdict" field must be exactly one of: "yes" or "no".
 8. The "confidence" field must be a float between 0.0 and 1.0, inclusive.
 
 REQUIRED JSON SCHEMA:
 {{
   "claim_id": "<string>",
-  "verdict": "<one of: supported | refuted | insufficient_evidence | misleading_context>",
+  "verdict": "<one of: yes | no >",
   "confidence": <float 0.0-1.0>,
   "reasoning_trace": [
     {{

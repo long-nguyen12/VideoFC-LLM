@@ -106,7 +106,7 @@ class ReasoningStep(BaseModel):
 class FinalVerdict(BaseModel):
     claim_id: str
     segment_id: str
-    verdict: str                # "supported" | "refuted" | "insufficient_evidence" | "misleading_context"
+    verdict: str
     confidence: float
     reasoning_trace: list[ReasoningStep] = Field(default_factory=list)
     modal_conflict_used: bool = False
