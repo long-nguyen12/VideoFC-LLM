@@ -128,12 +128,15 @@ def run_dataset_pipeline(
     # Step 1 — Visual captioning (or synthetic bypass)
     # ------------------------------------------------------------------
     logger.info("[1/7] Visual captioning")
+    print(segment.keyframes)
     if segment.keyframes:
         visual_caption = models.caption_fn(segment.keyframes)
         logger.debug("VLM caption: %s", visual_caption[:120])
+        print(visual_caption)
     else:
         visual_caption = inputs.visual_caption
         logger.debug("Synthetic caption (no keyframes): %s", visual_caption[:120])
+        print(visual_caption)
 
     # ------------------------------------------------------------------
     # Step 2 — Cross-modal consistency
