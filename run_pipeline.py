@@ -29,7 +29,6 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
-from schemas.data_models import EvidenceRef, ExplainabilityReport, VideoSegment
 from models.model_bundle import ModelBundle
 from modules.module1_claim_decomposer import decompose_claim
 from modules.module2_cross_modal_consistency import compute_modal_consistency
@@ -40,13 +39,10 @@ from modules.module6_verdict_aggregator import aggregate_verdict
 from modules.module7_explainability import build_explainability_report
 from modules.module4_targeted_retrieval import MAX_RETRIEVAL_ROUNDS
 
-from dataset.dataset_schemas import DatasetRecord
-from dataset.dataset_adapter import (
-    PipelineInputs,
-    RationaleContext,
+from dataset import (
     record_to_pipeline_inputs,
+    verdict_to_label,
 )
-from dataset.label_mapper import verdict_to_label
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +74,7 @@ class DatasetEvalResult:
     pred_label: int
     pred_confidence: float
     correct: bool
-    report: ExplainabilityReport
+    report: dict
 
 
 # ---------------------------------------------------------------------------
@@ -86,12 +82,12 @@ class DatasetEvalResult:
 # ---------------------------------------------------------------------------
 
 def run_dataset_pipeline(
-    inputs: PipelineInputs,
+    inputs: dict,
     models: ModelBundle,
     retriever: DenseRetriever,
     use_rationale_hints: bool = True,
     max_sub_questions: int = 5,
-) -> ExplainabilityReport:
+) -> dict:
     """
     Execute the pipeline from a PipelineInputs object.
 
@@ -113,28 +109,28 @@ def run_dataset_pipeline(
 
     Returns
     -------
-    ExplainabilityReport
+    dict
     """
-    segment = inputs.segment
-    claim_text = inputs.claim_text
-    claim_id = inputs.claim_id
+    segment = inputs["segment"]
+    claim_text = inputs["claim_text"]
+    claim_id = inputs["claim_id"]
 
     logger.info(
         "=== Dataset pipeline start | claim_id=%s segment=%s ===",
-        claim_id, segment.segment_id,
+        claim_id, segment["segment_id"],
     )
 
     # ------------------------------------------------------------------
     # Step 1 — Visual captioning (or synthetic bypass)
     # ------------------------------------------------------------------
     logger.info("[1/7] Visual captioning")
-    print(segment.keyframes)
-    if segment.keyframes:
-        visual_caption = models.caption_fn(segment.keyframes)
+    print(segment.get("keyframes", []))
+    if segment.get("keyframes", []):
+        visual_caption = models.caption_fn(segment["keyframes"])
         logger.debug("VLM caption: %s", visual_caption[:120])
         print(visual_caption)
     else:
-        visual_caption = inputs.visual_caption
+        visual_caption = inputs["visual_caption"]
         logger.debug("Synthetic caption (no keyframes): %s", visual_caption[:120])
         print(visual_caption)
 
@@ -145,8 +141,8 @@ def run_dataset_pipeline(
     modal_report = compute_modal_consistency(
         claim_text=claim_text,
         visual_caption=visual_caption,
-        transcript=segment.transcript,
-        segment_id=segment.segment_id,
+        transcript=segment["transcript"],
+        segment_id=segment["segment_id"],
         nli=models.nli,
     )
 
@@ -156,19 +152,23 @@ def run_dataset_pipeline(
     logger.info("[3/7] Claim decomposition")
     rationale_hint = ""
     if use_rationale_hints:
-        rationale_hint = inputs.rationale_context.prompt_summary()
+        ctx = inputs["rationale_context"]
+        lines = [f"Known verdict: {ctx.get('snopes_rating', '')}"]
+        if ctx.get('main_rationale'): lines.append(f"Main rationale: {ctx['main_rationale']}")
+        for i, r in enumerate(ctx.get('additional_rationales', []), 1): lines.append(f"Supporting rationale {i}: {r}")
+        rationale_hint = "\n".join(lines)[:600]
 
     claim = decompose_claim(
         claim_text=claim_text,
         claim_id=claim_id,
         segment=segment,
         visual_caption=visual_caption,
-        conflict_flag=modal_report.conflict_flag,
+        conflict_flag=modal_report["conflict_flag"],
         llm=models.decomposer_llm,
         rationale_hint=rationale_hint,
         max_sub_questions=max_sub_questions,
     )
-    logger.info("Decomposed into %d sub-questions.", len(claim.sub_questions))
+    logger.info("Decomposed into %d sub-questions.", len(claim["sub_questions"]))
 
     # ------------------------------------------------------------------
     # Step 4 — Gated evidence retrieval
@@ -177,18 +177,18 @@ def run_dataset_pipeline(
     evidence, strength_report = gated_retrieval_loop(
         claim=claim,
         segment=segment,
-        evidence=list(inputs.initial_evidence),
+        evidence=list(inputs["initial_evidence"]),
         modal_report=modal_report,
         retriever=retriever,
         nli=models.nli,
     )
-    retrieval_rounds = 0 if strength_report.gate_pass else MAX_RETRIEVAL_ROUNDS
+    retrieval_rounds = 0 if strength_report["gate_pass"] else MAX_RETRIEVAL_ROUNDS
     logger.info(
         "Gate: pass=%s coverage=%.2f confidence=%.2f consistency=%.2f",
-        strength_report.gate_pass,
-        strength_report.coverage_score,
-        strength_report.confidence_score,
-        strength_report.consistency_score,
+        strength_report["gate_pass"],
+        strength_report["coverage_score"],
+        strength_report["confidence_score"],
+        strength_report["consistency_score"],
     )
 
     # ------------------------------------------------------------------
@@ -202,7 +202,7 @@ def run_dataset_pipeline(
         llm=models.hop_llm,
         retriever=retriever,
     )
-    known = sum(1 for h in hop_results if not h.answer_unknown)
+    known = sum(1 for h in hop_results if not h["answer_unknown"])
     logger.info("Completed %d/%d hops.", known, len(hop_results))
 
     # ------------------------------------------------------------------
@@ -219,7 +219,7 @@ def run_dataset_pipeline(
         retrieval_rounds=retrieval_rounds,
         llm=models.aggregator_llm,
     )
-    logger.info("Verdict: %s (confidence=%.2f)", verdict.verdict, verdict.confidence)
+    logger.info("Verdict: %s (confidence=%.2f)", verdict["verdict"], verdict["confidence"])
 
     # ------------------------------------------------------------------
     # Step 7 — Explainability
@@ -235,12 +235,12 @@ def run_dataset_pipeline(
         llm=models.hop_llm,
     )
 
-    logger.info("=== Dataset pipeline complete | verdict=%s ===", report.verdict)
+    logger.info("=== Dataset pipeline complete | verdict=%s ===", report.get("verdict", "unknown"))
     return report
 
 
 def run_dataset_record(
-    record: DatasetRecord,
+    record: dict,
     models: ModelBundle,
     retriever: DenseRetriever,
     use_rationale_hints: bool = True,
@@ -251,7 +251,7 @@ def run_dataset_record(
 
     Parameters
     ----------
-    record               : Parsed DatasetRecord.
+    record               : Parsed DatasetRecord (now dict).
     models               : Loaded ModelBundle.
     retriever            : DenseRetriever pre-indexed on a passage corpus.
     use_rationale_hints  : Whether to inject gold rationale hints (Module 1).
@@ -264,8 +264,7 @@ def run_dataset_record(
     """
     inputs = record_to_pipeline_inputs(record, keyframe_paths=keyframe_paths)
 
-    # Index the record-specific evidence corpus so dynamic retrieval (Modules 4 & 5) works
-    retriever.index(list(inputs.initial_evidence))
+    retriever.index(list(inputs["initial_evidence"]))
 
     report = run_dataset_pipeline(
         inputs=inputs,
@@ -273,14 +272,14 @@ def run_dataset_record(
         retriever=retriever,
         use_rationale_hints=use_rationale_hints,
     )
-    pred_label = verdict_to_label(report.verdict)
+    pred_label = verdict_to_label(report.get("verdict", "unknown"))
     return DatasetEvalResult(
-        claim_id=inputs.claim_id,
-        gold_verdict=inputs.gold_verdict,
-        gold_label=inputs.gold_label,
-        pred_verdict=report.verdict,
+        claim_id=inputs["claim_id"],
+        gold_verdict=inputs["gold_verdict"],
+        gold_label=inputs["gold_label"],
+        pred_verdict=report.get("verdict", "unknown"),
         pred_label=pred_label,
-        pred_confidence=report.confidence,
-        correct=(report.verdict == inputs.gold_verdict),
+        pred_confidence=report.get("confidence", 0.0),
+        correct=(report.get("verdict", "unknown") == inputs["gold_verdict"]),
         report=report,
     )

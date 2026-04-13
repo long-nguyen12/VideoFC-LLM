@@ -111,7 +111,7 @@ def raw_record():
 
 @pytest.fixture
 def dataset_record(raw_record):
-    from dataset.dataset_schemas import DatasetRecord
+    from dataset.true_dataset_loader import rating_to_verdict
     return DatasetRecord.from_dict(raw_record)
 
 
@@ -122,7 +122,7 @@ def dataset_record(raw_record):
 class TestDatasetSchemas:
 
     def test_from_dict_parses_top_level(self, raw_record):
-        from dataset.dataset_schemas import DatasetRecord
+        from dataset.true_dataset_loader import rating_to_verdict
         r = DatasetRecord.from_dict(raw_record)
         assert r.claim == raw_record["claim"]
         assert r.rating == "Mostly False"
@@ -146,18 +146,18 @@ class TestDatasetSchemas:
     def test_original_rationales_all_rationales(self, dataset_record):
         all_r = dataset_record.original_rationales.all_rationales()
         assert len(all_r) == 4
-        assert all(isinstance(s, str) and s.strip() for s in all_r)
+        assert all(isinstance(s, str) and s["strip"]() for s in all_r)
 
     def test_summary_rationales_parsed(self, dataset_record):
         s = dataset_record.summary_rationales
-        assert "Mostly False" in s.synthesized_rationale
-        assert len(s.all_reasons()) == 3
+        assert "Mostly False" in s["synthesized_rationale"]
+        assert len(s["all_reasons"]()) == 3
 
     def test_detailed_reasons_ordered(self, dataset_record):
         reasons = dataset_record.summary_rationales.all_reasons()
-        assert reasons[0].startswith("Presidents do not")
-        assert reasons[1].startswith("Obama attended")
-        assert reasons[2].startswith("Reports suggesting")
+        assert reasons[0]["startswith"]("Presidents do not")
+        assert reasons[1]["startswith"]("Obama attended")
+        assert reasons[2]["startswith"]("Reports suggesting")
 
     def test_evidences_parsed(self, dataset_record):
         ev = dataset_record.evidences
@@ -168,7 +168,7 @@ class TestDatasetSchemas:
         ev7 = dataset_record.evidences.entries[6]   # evidence7 is index 6 (0-based)
         assert ev7.evidence_index == 7
         assert len(ev7.urls) == 2
-        assert ev7.urls[0].startswith("https://")
+        assert ev7.urls[0]["startswith"]("https://")
 
     def test_evidence_no_urls(self, dataset_record):
         ev1 = dataset_record.evidences.entries[0]
@@ -194,7 +194,7 @@ class TestDatasetSchemas:
         assert 9 in indices
 
     def test_missing_additional_rationale_defaults(self):
-        from dataset.dataset_schemas import DatasetRecord
+        from dataset.true_dataset_loader import rating_to_verdict
         raw = dict(RAW_RECORD)
         raw["original_rationales"] = {"main_rationale": "Only main."}
         r = DatasetRecord.from_dict(raw)
@@ -202,7 +202,7 @@ class TestDatasetSchemas:
         assert len(r.original_rationales.all_rationales()) == 1
 
     def test_evidence_block_from_dict_handles_missing_keys(self):
-        from dataset.dataset_schemas import EvidencesBlock
+        from dataset.true_dataset_loader import rating_to_verdict
         raw = {"num_of_evidence": 2, "evidence1": ["text one", []]}
         # evidence2 missing — should not raise
         block = EvidencesBlock.from_dict(raw)
@@ -231,36 +231,36 @@ class TestLabelMapper:
         ("Research In Progress","insufficient_evidence"),
     ])
     def test_known_ratings(self, rating, expected):
-        from dataset.label_mapper import rating_to_verdict
+        from dataset.true_dataset_loader import rating_to_verdict, VERDICT_TO_LABEL, label_to_verdict, rating_to_label, NUM_LABELS
         assert rating_to_verdict(rating) == expected
 
     def test_unknown_rating_fallback(self):
-        from dataset.label_mapper import rating_to_verdict
+        from dataset.true_dataset_loader import rating_to_verdict, VERDICT_TO_LABEL, label_to_verdict, rating_to_label, NUM_LABELS
         assert rating_to_verdict("Banana") == "insufficient_evidence"
 
     def test_case_insensitive(self):
-        from dataset.label_mapper import rating_to_verdict
+        from dataset.true_dataset_loader import rating_to_verdict, VERDICT_TO_LABEL, label_to_verdict, rating_to_label, NUM_LABELS
         assert rating_to_verdict("mostly false") == "refuted"
         assert rating_to_verdict("MOSTLY FALSE") == "refuted"
         assert rating_to_verdict("  True  ")    == "supported"
 
     def test_verdict_to_label_range(self):
-        from dataset.label_mapper import VERDICT_TO_LABEL, NUM_LABELS
+        from dataset.true_dataset_loader import rating_to_verdict, VERDICT_TO_LABEL, label_to_verdict, rating_to_label, NUM_LABELS
         assert len(VERDICT_TO_LABEL) == NUM_LABELS
         assert set(VERDICT_TO_LABEL.values()) == set(range(NUM_LABELS))
 
     def test_label_to_verdict_roundtrip(self):
-        from dataset.label_mapper import VERDICT_TO_LABEL, label_to_verdict
+        from dataset.true_dataset_loader import rating_to_verdict, VERDICT_TO_LABEL, label_to_verdict, rating_to_label, NUM_LABELS
         for verdict, label in VERDICT_TO_LABEL.items():
             assert label_to_verdict(label) == verdict
 
     def test_rating_to_label_mostly_false(self):
-        from dataset.label_mapper import rating_to_label, VERDICT_TO_LABEL
+        from dataset.true_dataset_loader import rating_to_verdict, VERDICT_TO_LABEL, label_to_verdict, rating_to_label, NUM_LABELS
         lbl = rating_to_label("Mostly False")
         assert lbl == VERDICT_TO_LABEL["refuted"]
 
     def test_verdict_confidence_floor(self):
-        from dataset.label_mapper import verdict_confidence_floor
+        from dataset.true_dataset_loader import rating_to_verdict, VERDICT_TO_LABEL, label_to_verdict, rating_to_label, NUM_LABELS
         assert verdict_confidence_floor("supported") > 0.0
         assert verdict_confidence_floor("refuted") > 0.0
         assert verdict_confidence_floor("misleading_context") > 0.0
@@ -274,7 +274,7 @@ class TestLabelMapper:
 class TestDatasetAdapter:
 
     def test_record_to_segment(self, dataset_record):
-        from dataset.dataset_adapter import record_to_segment
+        from dataset.true_dataset_loader import record_to_pipeline_inputs, _yyyymmdd_to_iso, _assign_hop_ids, record_to_segment, record_to_visual_caption, record_to_evidence, record_to_rationale_context
         seg = record_to_segment(dataset_record)
         assert seg.segment_id == "1942500"
         assert seg.start_ts == 0.0
@@ -283,35 +283,35 @@ class TestDatasetAdapter:
         assert seg.keyframes == []
 
     def test_record_to_segment_with_keyframes(self, dataset_record):
-        from dataset.dataset_adapter import record_to_segment
+        from dataset.true_dataset_loader import record_to_pipeline_inputs, _yyyymmdd_to_iso, _assign_hop_ids, record_to_segment, record_to_visual_caption, record_to_evidence, record_to_rationale_context
         seg = record_to_segment(dataset_record, keyframe_paths=["f1.jpg", "f2.jpg"])
         assert seg.keyframes == ["f1.jpg", "f2.jpg"]
 
     def test_record_to_visual_caption(self, dataset_record):
-        from dataset.dataset_adapter import record_to_visual_caption
+        from dataset.true_dataset_loader import record_to_pipeline_inputs, _yyyymmdd_to_iso, _assign_hop_ids, record_to_segment, record_to_visual_caption, record_to_evidence, record_to_rationale_context
         cap = record_to_visual_caption(dataset_record)
         assert "Obama" in cap or "Scalia" in cap
         assert len(cap) > 10
 
     def test_record_to_evidence_count(self, dataset_record):
-        from dataset.dataset_adapter import record_to_evidence
+        from dataset.true_dataset_loader import record_to_pipeline_inputs, _yyyymmdd_to_iso, _assign_hop_ids, record_to_segment, record_to_visual_caption, record_to_evidence, record_to_rationale_context
         evs = record_to_evidence(dataset_record)
         assert len(evs) == 9
 
     def test_evidence_ids(self, dataset_record):
-        from dataset.dataset_adapter import record_to_evidence
+        from dataset.true_dataset_loader import record_to_pipeline_inputs, _yyyymmdd_to_iso, _assign_hop_ids, record_to_segment, record_to_visual_caption, record_to_evidence, record_to_rationale_context
         evs = record_to_evidence(dataset_record)
         ids = [e.evidence_id for e in evs]
         assert "1942500-ev1" in ids
         assert "1942500-ev9" in ids
 
     def test_evidence_retrieval_score(self, dataset_record):
-        from dataset.dataset_adapter import record_to_evidence
+        from dataset.true_dataset_loader import record_to_pipeline_inputs, _yyyymmdd_to_iso, _assign_hop_ids, record_to_segment, record_to_visual_caption, record_to_evidence, record_to_rationale_context
         evs = record_to_evidence(dataset_record)
         assert all(e.retrieval_score == 1.0 for e in evs)
 
     def test_evidence_hop_ids_assigned(self, dataset_record):
-        from dataset.dataset_adapter import record_to_evidence
+        from dataset.true_dataset_loader import record_to_pipeline_inputs, _yyyymmdd_to_iso, _assign_hop_ids, record_to_segment, record_to_visual_caption, record_to_evidence, record_to_rationale_context
         evs = record_to_evidence(dataset_record)
         ev_map = {e.evidence_id: e for e in evs}
         # evidence1 appears in a claim relationship → should have hop_id assigned
@@ -319,14 +319,14 @@ class TestDatasetAdapter:
         assert len(ev1.hop_ids) >= 1
 
     def test_evidence_source_url_fallback(self, dataset_record):
-        from dataset.dataset_adapter import record_to_evidence
+        from dataset.true_dataset_loader import record_to_pipeline_inputs, _yyyymmdd_to_iso, _assign_hop_ids, record_to_segment, record_to_visual_caption, record_to_evidence, record_to_rationale_context
         evs = record_to_evidence(dataset_record)
         # evidence1 has no URLs → should fall back to video_url
         ev1 = next(e for e in evs if e.evidence_id == "1942500-ev1")
         assert "nbcnews" in ev1.source_url
 
     def test_evidence_source_url_from_list(self, dataset_record):
-        from dataset.dataset_adapter import record_to_evidence
+        from dataset.true_dataset_loader import record_to_pipeline_inputs, _yyyymmdd_to_iso, _assign_hop_ids, record_to_segment, record_to_visual_caption, record_to_evidence, record_to_rationale_context
         evs = record_to_evidence(dataset_record)
         ev7 = next(e for e in evs if e.evidence_id == "1942500-ev7")
         # evidence7 has URLs → first one should be used
@@ -334,7 +334,7 @@ class TestDatasetAdapter:
         assert "nbcnews" not in ev7.source_url   # not the fallback
 
     def test_record_to_rationale_context(self, dataset_record):
-        from dataset.dataset_adapter import record_to_rationale_context
+        from dataset.true_dataset_loader import record_to_pipeline_inputs, _yyyymmdd_to_iso, _assign_hop_ids, record_to_segment, record_to_visual_caption, record_to_evidence, record_to_rationale_context
         ctx = record_to_rationale_context(dataset_record)
         assert ctx.gold_verdict == "refuted"
         assert ctx.snopes_rating == "Mostly False"
@@ -343,45 +343,45 @@ class TestDatasetAdapter:
         assert len(ctx.detailed_reasons) == 3
 
     def test_rationale_context_prompt_summary(self, dataset_record):
-        from dataset.dataset_adapter import record_to_rationale_context
+        from dataset.true_dataset_loader import record_to_pipeline_inputs, _yyyymmdd_to_iso, _assign_hop_ids, record_to_segment, record_to_visual_caption, record_to_evidence, record_to_rationale_context
         ctx = record_to_rationale_context(dataset_record)
         summary = ctx.prompt_summary()
         assert "Mostly False" in summary
         assert len(summary) <= 600
 
     def test_rationale_context_prompt_summary_truncation(self, dataset_record):
-        from dataset.dataset_adapter import record_to_rationale_context
+        from dataset.true_dataset_loader import record_to_pipeline_inputs, _yyyymmdd_to_iso, _assign_hop_ids, record_to_segment, record_to_visual_caption, record_to_evidence, record_to_rationale_context
         ctx = record_to_rationale_context(dataset_record)
         summary = ctx.prompt_summary(max_chars=50)
         assert len(summary) <= 50
 
     def test_record_to_pipeline_inputs(self, dataset_record):
-        from dataset.dataset_adapter import record_to_pipeline_inputs
+        from dataset.true_dataset_loader import record_to_pipeline_inputs, _yyyymmdd_to_iso, _assign_hop_ids, record_to_segment, record_to_visual_caption, record_to_evidence, record_to_rationale_context
         inputs = record_to_pipeline_inputs(dataset_record)
-        assert inputs.claim_text == dataset_record.claim
-        assert inputs.gold_verdict == "refuted"
-        assert inputs.gold_label >= 0
-        assert inputs.segment.segment_id == "1942500"
-        assert len(inputs.initial_evidence) == 9
-        assert inputs.visual_caption != ""
-        assert inputs.claim_id != ""
+        assert inputs["claim_text"] == dataset_record.claim
+        assert inputs["gold_verdict"] == "refuted"
+        assert inputs["gold_label"] >= 0
+        assert inputs["segment"]["segment_id"] == "1942500"
+        assert len(inputs["initial_evidence"]) == 9
+        assert inputs["visual_caption"] != ""
+        assert inputs["claim_id"] != ""
 
     def test_claim_id_is_safe_string(self, dataset_record):
-        from dataset.dataset_adapter import record_to_pipeline_inputs
+        from dataset.true_dataset_loader import record_to_pipeline_inputs, _yyyymmdd_to_iso, _assign_hop_ids, record_to_segment, record_to_visual_caption, record_to_evidence, record_to_rationale_context
         import re
         inputs = record_to_pipeline_inputs(dataset_record)
         # Should contain only alphanumeric, underscore, dash
-        assert re.match(r'^[a-zA-Z0-9_-]+$', inputs.claim_id)
-        assert len(inputs.claim_id) <= 64
+        assert re.match(r'^[a-zA-Z0-9_-]+$', inputs["claim_id"])
+        assert len(inputs["claim_id"]) <= 64
 
     def test_date_conversion(self):
-        from dataset.dataset_adapter import _yyyymmdd_to_iso
+        from dataset.true_dataset_loader import record_to_pipeline_inputs, _yyyymmdd_to_iso, _assign_hop_ids, record_to_segment, record_to_visual_caption, record_to_evidence, record_to_rationale_context
         assert _yyyymmdd_to_iso(20160217.0) == "2016-02-17"
         assert _yyyymmdd_to_iso(20000101.0) == "2000-01-01"
         assert _yyyymmdd_to_iso(0.0) == ""  # invalid
 
     def test_hop_id_assignment_claim_rels_first(self, dataset_record):
-        from dataset.dataset_adapter import _assign_hop_ids
+        from dataset.true_dataset_loader import record_to_pipeline_inputs, _yyyymmdd_to_iso, _assign_hop_ids, record_to_segment, record_to_visual_caption, record_to_evidence, record_to_rationale_context
         hop_map = _assign_hop_ids(
             dataset_record.evidences.entries,
             dataset_record.relationship_with_evidence,
@@ -391,7 +391,7 @@ class TestDatasetAdapter:
         assert len(assigned) >= 2
 
     def test_no_duplicate_hop_ids_per_evidence(self, dataset_record):
-        from dataset.dataset_adapter import _assign_hop_ids
+        from dataset.true_dataset_loader import record_to_pipeline_inputs, _yyyymmdd_to_iso, _assign_hop_ids, record_to_segment, record_to_visual_caption, record_to_evidence, record_to_rationale_context
         hop_map = _assign_hop_ids(
             dataset_record.evidences.entries,
             dataset_record.relationship_with_evidence,
@@ -416,7 +416,7 @@ class TestDatasetLoader:
             json.dump(records, f)
 
     def test_load_jsonl(self, raw_record):
-        from dataset.dataset_loader import DatasetLoader
+        from dataset.true_dataset_loader import split_records
         with tempfile.NamedTemporaryFile(suffix=".jsonl", delete=False, mode="w") as f:
             f.write(json.dumps(raw_record) + "\n")
             f.write(json.dumps(raw_record) + "\n")
@@ -425,12 +425,12 @@ class TestDatasetLoader:
             loader = DatasetLoader(tmp_path)
             records = loader.load_all()
             assert len(records) == 2
-            assert records[0].claim == raw_record["claim"]
+            assert records[0]["claim"] == raw_record["claim"]
         finally:
             os.unlink(tmp_path)
 
     def test_load_json_array(self, raw_record):
-        from dataset.dataset_loader import DatasetLoader
+        from dataset.true_dataset_loader import split_records
         with tempfile.NamedTemporaryFile(suffix=".json", delete=False, mode="w") as f:
             json.dump([raw_record, raw_record], f)
             tmp_path = f.name
@@ -441,7 +441,7 @@ class TestDatasetLoader:
             os.unlink(tmp_path)
 
     def test_load_single_json_object(self, raw_record):
-        from dataset.dataset_loader import DatasetLoader
+        from dataset.true_dataset_loader import split_records
         with tempfile.NamedTemporaryFile(suffix=".json", delete=False, mode="w") as f:
             json.dump(raw_record, f)
             tmp_path = f.name
@@ -452,7 +452,7 @@ class TestDatasetLoader:
             os.unlink(tmp_path)
 
     def test_max_records(self, raw_record):
-        from dataset.dataset_loader import DatasetLoader
+        from dataset.true_dataset_loader import split_records
         with tempfile.NamedTemporaryFile(suffix=".jsonl", delete=False, mode="w") as f:
             for _ in range(5):
                 f.write(json.dumps(raw_record) + "\n")
@@ -464,7 +464,7 @@ class TestDatasetLoader:
             os.unlink(tmp_path)
 
     def test_skip_malformed_lines(self, raw_record):
-        from dataset.dataset_loader import DatasetLoader
+        from dataset.true_dataset_loader import split_records
         with tempfile.NamedTemporaryFile(suffix=".jsonl", delete=False, mode="w") as f:
             f.write(json.dumps(raw_record) + "\n")
             f.write("NOT JSON\n")
@@ -478,22 +478,22 @@ class TestDatasetLoader:
             os.unlink(tmp_path)
 
     def test_from_dict(self, raw_record):
-        from dataset.dataset_loader import DatasetLoader
+        from dataset.true_dataset_loader import split_records
         record = DatasetLoader.from_dict(raw_record)
         assert record.rating == "Mostly False"
 
     def test_from_json_string(self, raw_record):
-        from dataset.dataset_loader import DatasetLoader
+        from dataset.true_dataset_loader import split_records
         record = DatasetLoader.from_json_string(json.dumps(raw_record))
         assert record.claim == raw_record["claim"]
 
     def test_file_not_found(self):
-        from dataset.dataset_loader import DatasetLoader
+        from dataset.true_dataset_loader import split_records
         with pytest.raises(FileNotFoundError):
             DatasetLoader("/nonexistent/path/file.jsonl")
 
     def test_split_records(self, raw_record):
-        from dataset.dataset_loader import DatasetLoader, split_records
+        from dataset.true_dataset_loader import split_records
         records = [DatasetLoader.from_dict(raw_record) for _ in range(20)]
         train, val, test = split_records(records, train_frac=0.7, val_frac=0.15, seed=0)
         assert len(train) + len(val) + len(test) == 20
@@ -501,7 +501,7 @@ class TestDatasetLoader:
         assert len(train) > len(test)
 
     def test_split_deterministic(self, raw_record):
-        from dataset.dataset_loader import DatasetLoader, split_records
+        from dataset.true_dataset_loader import split_records
         records = [DatasetLoader.from_dict(raw_record) for _ in range(10)]
         t1, v1, s1 = split_records(records, seed=42)
         t2, v2, s2 = split_records(records, seed=42)
@@ -567,11 +567,11 @@ class TestDatasetPipeline:
         return r
 
     def test_synthetic_caption_used_when_no_keyframes(self, dataset_record):
-        from dataset.dataset_adapter import record_to_pipeline_inputs
+        from dataset.true_dataset_loader import record_to_pipeline_inputs, _yyyymmdd_to_iso, _assign_hop_ids, record_to_segment, record_to_visual_caption, record_to_evidence, record_to_rationale_context
         from run_pipeline import run_dataset_pipeline
 
         inputs = record_to_pipeline_inputs(dataset_record)
-        assert inputs.segment.keyframes == []   # no frames in dataset
+        assert inputs["segment"]["keyframes"] == []   # no frames in dataset
 
         bundle = self._make_stub_bundle()
         retriever = self._make_stub_retriever()
@@ -583,7 +583,7 @@ class TestDatasetPipeline:
         assert report is not None
 
     def test_vlm_called_when_keyframes_present(self, dataset_record):
-        from dataset.dataset_adapter import record_to_pipeline_inputs
+        from dataset.true_dataset_loader import record_to_pipeline_inputs, _yyyymmdd_to_iso, _assign_hop_ids, record_to_segment, record_to_visual_caption, record_to_evidence, record_to_rationale_context
         from run_pipeline import run_dataset_pipeline
 
         inputs = record_to_pipeline_inputs(dataset_record, keyframe_paths=["f.jpg"])
@@ -594,7 +594,7 @@ class TestDatasetPipeline:
         bundle.caption_fn.assert_called_once_with(["f.jpg"])
 
     def test_rationale_hint_injected_into_decomposer(self, dataset_record):
-        from dataset.dataset_adapter import record_to_pipeline_inputs
+        from dataset.true_dataset_loader import record_to_pipeline_inputs, _yyyymmdd_to_iso, _assign_hop_ids, record_to_segment, record_to_visual_caption, record_to_evidence, record_to_rationale_context
         from run_pipeline import run_dataset_pipeline
 
         inputs = record_to_pipeline_inputs(dataset_record)
@@ -611,7 +611,7 @@ class TestDatasetPipeline:
         assert "Mostly False" in user_content or "Obama" in user_content
 
     def test_rationale_hint_omitted_when_disabled(self, dataset_record):
-        from dataset.dataset_adapter import record_to_pipeline_inputs
+        from dataset.true_dataset_loader import record_to_pipeline_inputs, _yyyymmdd_to_iso, _assign_hop_ids, record_to_segment, record_to_visual_caption, record_to_evidence, record_to_rationale_context
         from run_pipeline import run_dataset_pipeline
 
         inputs = record_to_pipeline_inputs(dataset_record)
@@ -634,13 +634,13 @@ class TestDatasetPipeline:
 
         result = run_dataset_record(dataset_record, bundle, retriever)
 
-        assert result.gold_verdict == "refuted"
-        assert result.pred_verdict in (
+        assert result["gold_verdict"] == "refuted"
+        assert result["pred_verdict"] in (
             "supported", "refuted", "insufficient_evidence", "misleading_context"
         )
-        assert isinstance(result.correct, bool)
-        assert result.claim_id != ""
-        assert result.report is not None
+        assert isinstance(result["correct"], bool)
+        assert result["claim_id"] != ""
+        assert result["report"] is not None
 
     def test_correct_flag_set_properly(self, dataset_record):
         from run_pipeline import run_dataset_record
@@ -649,7 +649,7 @@ class TestDatasetPipeline:
         retriever = self._make_stub_retriever()
 
         result = run_dataset_record(dataset_record, bundle, retriever)
-        assert result.correct == (result.pred_verdict == result.gold_verdict)
+        assert result["correct"] == (result["pred_verdict"] == result["gold_verdict"])
 
 
 # ===========================================================================
@@ -661,10 +661,9 @@ class TestEvaluation:
     def _make_result(self, gold_verdict, pred_verdict, confidence=0.8):
         """Build a minimal DatasetEvalResult stub."""
         from run_pipeline import DatasetEvalResult
-        from dataset.label_mapper import verdict_to_label
-        from schemas.data_models import ExplainabilityReport
-
-        report = ExplainabilityReport(
+        from dataset.true_dataset_loader import rating_to_verdict, VERDICT_TO_LABEL, label_to_verdict, rating_to_label, NUM_LABELS
+        
+        report = dict(
             claim_id="c", segment_id="s",
             verdict=pred_verdict, confidence=confidence,
         )

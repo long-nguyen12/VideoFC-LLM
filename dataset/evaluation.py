@@ -19,7 +19,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Any
 
-from dataset.label_mapper import LABEL_TO_VERDICT, NUM_LABELS, VERDICT_DISPLAY
+from dataset.true_dataset_loader import LABEL_TO_VERDICT, NUM_LABELS, VERDICT_DISPLAY
 
 logger = logging.getLogger(__name__)
 

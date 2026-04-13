@@ -21,7 +21,6 @@ import json
 import logging
 import re
 
-from schemas import ClaimDecomposition, SubQuestion, VideoSegment
 from models import GenerativeLLM
 from modules.utils import safe_json_parse as _safe_json_parse
 
@@ -120,14 +119,14 @@ def _build_prompt(
 def decompose_claim(
     claim_text: str,
     claim_id: str,
-    segment: VideoSegment,
+    segment: dict,
     visual_caption: str,
     conflict_flag: bool,
     llm: GenerativeLLM,
     max_retries: int = 2,
     rationale_hint: str = "",
     max_sub_questions: int = 5,
-) -> ClaimDecomposition:
+) -> dict:
     """
     Decompose a composite claim into atomic sub-questions.
 
@@ -149,14 +148,14 @@ def decompose_claim(
 
     Returns
     -------
-    ClaimDecomposition
+    dict
     """
     prompt = _build_prompt(
         claim_text=claim_text,
         visual_caption=visual_caption,
-        transcript_excerpt=segment.transcript[:300],
-        start_ts=segment.start_ts,
-        end_ts=segment.end_ts,
+        transcript_excerpt=segment["transcript"][:300],
+        start_ts=segment["start_ts"],
+        end_ts=segment["end_ts"],
         conflict_flag=conflict_flag,
         claim_id=claim_id,
         rationale_hint=rationale_hint,
@@ -173,12 +172,12 @@ def decompose_claim(
             print("DEBUG: Parsed JSON data:\n", json.dumps(data, indent=2))  # Debug print
 
             sub_questions = [
-                SubQuestion(
-                    hop=sq["hop"],
-                    question=sq["question"],
-                    depends_on_hops=sq.get("depends_on_hops", []),
-                    evidence_type=sq.get("evidence_type", "any"),
-                )
+                {
+                    "hop": sq["hop"],
+                    "question": sq["question"],
+                    "depends_on_hops": sq.get("depends_on_hops", []),
+                    "evidence_type": sq.get("evidence_type", "any"),
+                }
                 for sq in data.get("sub_questions", [])
             ]
 
@@ -188,12 +187,12 @@ def decompose_claim(
             # Hard-cap: silently drop any excess sub-questions
             sub_questions = sub_questions[:max_sub_questions]
 
-            return ClaimDecomposition(
-                claim_id=data.get("claim_id", claim_id),
-                claim_text=claim_text,
-                segment_id=segment.segment_id,
-                sub_questions=sub_questions,
-            )
+            return {
+                "claim_id": data.get("claim_id", claim_id),
+                "claim_text": claim_text,
+                "segment_id": segment["segment_id"],
+                "sub_questions": sub_questions,
+            }
 
         except Exception as exc:
             last_exc = exc
@@ -201,16 +200,16 @@ def decompose_claim(
 
     # Fallback: single sub-question covering the whole claim
     logger.error("All decomposition attempts failed (%s). Using fallback single-hop.", last_exc)
-    return ClaimDecomposition(
-        claim_id=claim_id,
-        claim_text=claim_text,
-        segment_id=segment.segment_id,
-        sub_questions=[
-            SubQuestion(
-                hop=1,
-                question=claim_text,
-                depends_on_hops=[],
-                evidence_type="any",
-            )
+    return {
+        "claim_id": claim_id,
+        "claim_text": claim_text,
+        "segment_id": segment["segment_id"],
+        "sub_questions": [
+            {
+                "hop": 1,
+                "question": claim_text,
+                "depends_on_hops": [],
+                "evidence_type": "any",
+            }
         ],
-    )
+    }

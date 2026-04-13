@@ -10,17 +10,7 @@ import json
 import pytest
 from unittest.mock import MagicMock, patch
 
-from schemas.data_models import (
-    ClaimDecomposition,
-    EvidenceRef,
-    EvidenceStrengthReport,
-    FinalVerdict,
-    HopResult,
-    ModalConflictReport,
-    ReasoningStep,
-    SubQuestion,
-    VideoSegment,
-)
+
 
 
 # ---------------------------------------------------------------------------
@@ -29,7 +19,7 @@ from schemas.data_models import (
 
 @pytest.fixture
 def segment():
-    return VideoSegment(
+    return dict(
         segment_id="seg-001",
         start_ts=0.0,
         end_ts=30.0,
@@ -41,7 +31,7 @@ def segment():
 @pytest.fixture
 def evidence_pool():
     return [
-        EvidenceRef(
+        dict(
             evidence_id="ev-001",
             source_url="https://source.com/a",
             source_date="2024-01-10",
@@ -49,7 +39,7 @@ def evidence_pool():
             retrieval_score=0.91,
             hop_ids=[1],
         ),
-        EvidenceRef(
+        dict(
             evidence_id="ev-002",
             source_url="https://source.com/b",
             source_date="2024-01-12",
@@ -62,14 +52,14 @@ def evidence_pool():
 
 @pytest.fixture
 def claim_decomp():
-    return ClaimDecomposition(
+    return dict(
         claim_id="claim-001",
         claim_text="The bridge collapsed due to neglected maintenance.",
         segment_id="seg-001",
         sub_questions=[
-            SubQuestion(hop=1, question="Was maintenance neglected?",
+            dict(hop=1, question="Was maintenance neglected?",
                         depends_on_hops=[], evidence_type="web"),
-            SubQuestion(hop=2, question="Did the bridge collapse?",
+            dict(hop=2, question="Did the bridge collapse?",
                         depends_on_hops=[1], evidence_type="any"),
         ],
     )
@@ -77,7 +67,7 @@ def claim_decomp():
 
 @pytest.fixture
 def modal_report():
-    return ModalConflictReport(
+    return dict(
         segment_id="seg-001",
         vc_score=0.71, tc_score=0.65, vt_score=0.78,
         conflict_flag=False, dominant_conflict=None,
@@ -86,7 +76,7 @@ def modal_report():
 
 @pytest.fixture
 def modal_report_conflict():
-    return ModalConflictReport(
+    return dict(
         segment_id="seg-001",
         vc_score=0.22, tc_score=0.60, vt_score=0.55,
         conflict_flag=True, dominant_conflict="V↔C",
@@ -95,7 +85,7 @@ def modal_report_conflict():
 
 @pytest.fixture
 def strength_pass():
-    return EvidenceStrengthReport(
+    return dict(
         claim_id="claim-001",
         coverage_score=0.80, confidence_score=0.72, consistency_score=0.65,
         gate_pass=True, weak_aspects=[],
@@ -104,7 +94,7 @@ def strength_pass():
 
 @pytest.fixture
 def strength_fail():
-    return EvidenceStrengthReport(
+    return dict(
         claim_id="claim-001",
         coverage_score=0.40, confidence_score=0.35, consistency_score=0.30,
         gate_pass=False, weak_aspects=["Was maintenance neglected?"],
@@ -114,12 +104,12 @@ def strength_fail():
 @pytest.fixture
 def hop_results():
     return [
-        HopResult(claim_id="claim-001", hop=1,
+        dict(claim_id="claim-001", hop=1,
                   question="Was maintenance neglected?",
                   answer="No — records confirm regular maintenance.",
                   confidence=0.85, answer_unknown=False,
                   supported_by=["ev-001"]),
-        HopResult(claim_id="claim-001", hop=2,
+        dict(claim_id="claim-001", hop=2,
                   question="Did the bridge collapse?",
                   answer="There is no evidence of a collapse.",
                   confidence=0.78, answer_unknown=False,
@@ -167,11 +157,11 @@ class TestModule1ClaimDecomposer:
             llm=_make_llm(llm_response),
         )
 
-        assert result.claim_id == "claim-001"
-        assert result.segment_id == "seg-001"
-        assert len(result.sub_questions) == 2
-        assert result.sub_questions[0].hop == 1
-        assert result.sub_questions[1].depends_on_hops == [1]
+        assert result["claim_id"] == "claim-001"
+        assert result["segment_id"] == "seg-001"
+        assert len(result["sub_questions"]) == 2
+        assert result["sub_questions"][0].hop == 1
+        assert result["sub_questions"][1].depends_on_hops == [1]
 
     def test_fallback_on_llm_failure(self, segment):
         from modules.module1_claim_decomposer import decompose_claim
@@ -189,9 +179,9 @@ class TestModule1ClaimDecomposer:
             max_retries=1,
         )
         # Fallback: single sub-question covering the whole claim
-        assert len(result.sub_questions) == 1
-        assert result.sub_questions[0].question == "Some claim."
-        assert result.sub_questions[0].hop == 1
+        assert len(result["sub_questions"]) == 1
+        assert result["sub_questions"][0].question == "Some claim."
+        assert result["sub_questions"][0].hop == 1
 
     def test_markdown_fences_stripped(self, segment):
         from modules.module1_claim_decomposer import decompose_claim
@@ -201,8 +191,8 @@ class TestModule1ClaimDecomposer:
         llm.generate.return_value = fenced
 
         result = decompose_claim("Q?", "c", segment, "", False, llm)
-        assert result.claim_id == "c"
-        assert len(result.sub_questions) == 1
+        assert result["claim_id"] == "c"
+        assert len(result["sub_questions"]) == 1
 
 
 # ===========================================================================
@@ -220,9 +210,9 @@ class TestModule2CrossModal:
             segment_id="seg-001",
             nli=_make_nli(0.80),
         )
-        assert not result.conflict_flag
-        assert result.dominant_conflict is None
-        assert result.vc_score == pytest.approx(0.80, abs=1e-4)
+        assert not result["conflict_flag"]
+        assert result["dominant_conflict"] is None
+        assert result["vc_score"] == pytest.approx(0.80, abs=1e-4)
 
     def test_conflict_detected(self):
         from modules.module2_cross_modal_consistency import compute_modal_consistency
@@ -239,8 +229,8 @@ class TestModule2CrossModal:
             segment_id="seg-001",
             nli=nli,
         )
-        assert result.conflict_flag
-        assert result.dominant_conflict == "V↔C"
+        assert result["conflict_flag"]
+        assert result["dominant_conflict"] == "V↔C"
 
     def test_all_pairs_scored(self):
         from modules.module2_cross_modal_consistency import compute_modal_consistency
@@ -261,9 +251,9 @@ class TestModule3EvidenceStrength:
         from modules.module3_evidence_strength import score_evidence
 
         result = score_evidence(claim_decomp, evidence_pool, modal_report, _make_nli(0.80))
-        assert result.gate_pass
-        assert result.weak_aspects == []
-        assert result.coverage_score == pytest.approx(1.0, abs=1e-4)
+        assert result["gate_pass"]
+        assert result["weak_aspects"] == []
+        assert result["coverage_score"] == pytest.approx(1.0, abs=1e-4)
 
     def test_gate_fails_with_weak_evidence(
         self, claim_decomp, evidence_pool, modal_report
@@ -271,29 +261,29 @@ class TestModule3EvidenceStrength:
         from modules.module3_evidence_strength import score_evidence
 
         result = score_evidence(claim_decomp, evidence_pool, modal_report, _make_nli(0.10))
-        assert not result.gate_pass
-        assert len(result.weak_aspects) == 2
+        assert not result["gate_pass"]
+        assert len(result["weak_aspects"]) == 2
 
     def test_consistency_uses_min_modal_score(
         self, claim_decomp, evidence_pool
     ):
         from modules.module3_evidence_strength import score_evidence
 
-        modal = ModalConflictReport(
+        modal = dict(
             segment_id="s", vc_score=0.30, tc_score=0.90, vt_score=0.85,
             conflict_flag=True, dominant_conflict="V↔C",
         )
         result = score_evidence(claim_decomp, evidence_pool, modal, _make_nli(0.80))
-        assert result.consistency_score == pytest.approx(0.30, abs=1e-4)
+        assert result["consistency_score"] == pytest.approx(0.30, abs=1e-4)
         # Consistency < 0.60 should cause gate to fail
-        assert not result.gate_pass
+        assert not result["gate_pass"]
 
     def test_no_evidence_returns_zero(self, claim_decomp, modal_report):
         from modules.module3_evidence_strength import score_evidence
 
         result = score_evidence(claim_decomp, [], modal_report, _make_nli(0.80))
-        assert result.coverage_score == 0.0
-        assert not result.gate_pass
+        assert result["coverage_score"] == 0.0
+        assert not result["gate_pass"]
 
 
 # ===========================================================================
@@ -322,7 +312,7 @@ class TestModule4TargetedRetrieval:
             nli=_make_nli(0.80),
             max_rounds=3,
         )
-        assert report.gate_pass
+        assert report["gate_pass"]
         # Retriever should not have been called
         # (gate passes on first scoring pass)
 
@@ -331,7 +321,7 @@ class TestModule4TargetedRetrieval:
     ):
         from modules.module4_targeted_retrieval import gated_retrieval_loop
 
-        new_ev = EvidenceRef(
+        new_ev = dict(
             evidence_id="ev-new", source_url="", source_date="",
             passage_text="New passage.", retrieval_score=0.7, hop_ids=[],
         )
@@ -374,14 +364,14 @@ class TestModule4TargetedRetrieval:
         from modules.module4_targeted_retrieval import build_retrieval_query
 
         resolved = [
-            HopResult(claim_id="c", hop=1, question="Q1?",
+            dict(claim_id="c", hop=1, question="Q1?",
                       answer="Bridge was maintained.", confidence=0.8,
                       answer_unknown=False, supported_by=[]),
         ]
         query = build_retrieval_query("Did the bridge collapse?", resolved, segment)
         assert "Did the bridge collapse?" in query
         assert "Bridge was maintained." in query
-        assert segment.transcript[:10] in query
+        assert segment["transcript"][:10] in query
 
 
 # ===========================================================================
@@ -413,8 +403,8 @@ class TestModule5MultiHop:
         results = run_multihop(claim_decomp, evidence_pool, segment,
                                llm, self._make_retriever())
         assert len(results) == 2
-        assert not results[0].answer_unknown
-        assert not results[1].answer_unknown
+        assert not results[0]["answer_unknown"]
+        assert not results[1]["answer_unknown"]
 
     def test_unknown_hop_stops_chain(
         self, claim_decomp, evidence_pool, segment
@@ -432,22 +422,22 @@ class TestModule5MultiHop:
                                llm, self._make_retriever())
 
         # Hop 2 depends_on_hops=[1], so it should be skipped
-        assert results[0].answer_unknown
+        assert results[0]["answer_unknown"]
         if len(results) > 1:
-            assert results[1].answer_unknown
+            assert results[1]["answer_unknown"]
 
     def test_retry_on_parse_failure(self, claim_decomp, evidence_pool, segment):
         from modules.module5_multihop_reasoning import run_single_hop
 
-        sq = claim_decomp.sub_questions[0]
+        sq = claim_decomp["sub_questions"][0]
         good = {"hop": 1, "question": "Q?", "answer": "A.",
                 "confidence": 0.7, "supported_by": [], "answer_unknown": False}
         llm = MagicMock()
         llm.generate.side_effect = ["INVALID JSON", json.dumps(good)]
 
         result = run_single_hop(sq, {}, evidence_pool, llm, max_retries=2)
-        assert not result.answer_unknown
-        assert result.answer == "A."
+        assert not result["answer_unknown"]
+        assert result["answer"] == "A."
 
 
 # ===========================================================================
@@ -483,10 +473,10 @@ class TestModule6VerdictAggregator:
             llm=_make_llm(llm_resp),
         )
 
-        assert verdict.verdict == "refuted"
-        assert verdict.confidence == pytest.approx(0.88)
-        assert verdict.gate_passed
-        assert len(verdict.reasoning_trace) == 1
+        assert verdict["verdict"] == "refuted"
+        assert verdict["confidence"] == pytest.approx(0.88)
+        assert verdict["gate_passed"]
+        assert len(verdict["reasoning_trace"]) == 1
 
     def test_insufficient_evidence_without_llm_call(
         self, claim_decomp, segment, modal_report, strength_fail, hop_results
@@ -505,9 +495,9 @@ class TestModule6VerdictAggregator:
             llm=llm,
         )
 
-        assert verdict.verdict == "insufficient_evidence"
-        assert verdict.confidence == 0.0
-        assert not verdict.gate_passed
+        assert verdict["verdict"] == "insufficient_evidence"
+        assert verdict["confidence"] == 0.0
+        assert not verdict["gate_passed"]
         llm.generate.assert_not_called()
 
     def test_fallback_on_llm_parse_failure(
@@ -524,7 +514,7 @@ class TestModule6VerdictAggregator:
             modal_report=modal_report, strength_report=strength_pass,
             retrieval_rounds=0, llm=llm, max_retries=1,
         )
-        assert verdict.verdict == "insufficient_evidence"
+        assert verdict["verdict"] == "insufficient_evidence"
 
     def test_valid_verdict_values(
         self, claim_decomp, segment, modal_report, strength_pass, hop_results
@@ -548,7 +538,7 @@ class TestModule6VerdictAggregator:
                 modal_report=modal_report, strength_report=strength_pass,
                 retrieval_rounds=0, llm=_make_llm(llm_resp),
             )
-            assert verdict.verdict == v
+            assert verdict["verdict"] == v
 
 
 # ===========================================================================
@@ -557,13 +547,13 @@ class TestModule6VerdictAggregator:
 
 class TestModule7Explainability:
     def _make_verdict(self, verdict_label="refuted"):
-        return FinalVerdict(
+        return dict(
             claim_id="claim-001",
             segment_id="seg-001",
             verdict=verdict_label,
             confidence=0.88,
             reasoning_trace=[
-                ReasoningStep(step=1, finding="Finding.", source_hop=1,
+                dict(step=1, finding="Finding.", source_hop=1,
                               evidence_ids=["ev-001"]),
             ],
             modal_conflict_used=False,
@@ -581,11 +571,11 @@ class TestModule7Explainability:
             hop_results, evidence_pool, "refuted", _make_nli(0.60)
         )
         # Each hop with supported_by should have exactly one saliency entry
-        hop_saliencies = {s.hop: s for s in saliency}
+        hop_saliencies = {s["hop"]: s for s in saliency}
         for hop in hop_results:
-            if hop.supported_by:
-                assert hop.hop in hop_saliencies
-                assert 0.0 <= hop_saliencies[hop.hop].saliency_score <= 1.0
+            if hop["supported_by"]:
+                assert hop["hop"] in hop_saliencies
+                assert 0.0 <= hop_saliencies[hop["hop"]]["saliency_score"] <= 1.0
 
     def test_modal_annotations_only_for_conflicts(
         self, segment
@@ -593,21 +583,21 @@ class TestModule7Explainability:
         from modules.module7_explainability import build_modal_annotations
 
         # No conflict → empty list
-        report_no_conflict = ModalConflictReport(
+        report_no_conflict = dict(
             segment_id="s", vc_score=0.80, tc_score=0.75, vt_score=0.70,
             conflict_flag=False, dominant_conflict=None,
         )
         assert build_modal_annotations(report_no_conflict, segment) == []
 
         # One conflict
-        report_conflict = ModalConflictReport(
+        report_conflict = dict(
             segment_id="s", vc_score=0.20, tc_score=0.75, vt_score=0.70,
             conflict_flag=True, dominant_conflict="V↔C",
         )
         annotations = build_modal_annotations(report_conflict, segment)
         assert len(annotations) == 1
-        assert annotations[0].pair == "V↔C"
-        assert str(segment.start_ts) in annotations[0].human_note
+        assert annotations[0]["pair"] == "V↔C"
+        assert str(segment["start_ts"]) in annotations[0]["human_note"]
 
     def test_hop_summaries_length(self, hop_results):
         from modules.module7_explainability import generate_hop_summaries
@@ -625,7 +615,7 @@ class TestModule7Explainability:
         from modules.module7_explainability import generate_hop_summaries
 
         hops = [
-            HopResult(claim_id="c", hop=1, question="Q?",
+            dict(claim_id="c", hop=1, question="Q?",
                       answer="", confidence=0.0, answer_unknown=True),
         ]
         llm = MagicMock()
@@ -653,13 +643,13 @@ class TestModule7Explainability:
             llm=_make_llm(summary_resp),
         )
 
-        assert report.claim_id == "claim-001"
-        assert report.segment_id == "seg-001"
-        assert report.verdict == "refuted"
-        assert report.gate_passed
-        assert report.retrieval_rounds == 1
-        assert report.counterfactual == "CF statement."
-        assert len(report.hop_summaries) == len(hop_results)
+        assert report["claim_id"] == "claim-001"
+        assert report["segment_id"] == "seg-001"
+        assert report["verdict"] == "refuted"
+        assert report["gate_passed"]
+        assert report["retrieval_rounds"] == 1
+        assert report["counterfactual"] == "CF statement."
+        assert len(report["hop_summaries"]) == len(hop_results)
 
     def test_report_passthrough_fields(
         self, hop_results, evidence_pool, modal_report, segment
@@ -667,7 +657,7 @@ class TestModule7Explainability:
         from modules.module7_explainability import build_explainability_report
 
         verdict = self._make_verdict("misleading_context")
-        verdict.retrieval_rounds = 2
+        verdict["retrieval_rounds"] = 2
 
         report = build_explainability_report(
             verdict=verdict,
@@ -678,8 +668,8 @@ class TestModule7Explainability:
             nli=_make_nli(0.70),
             llm=_make_llm({"summary": "s"}),
         )
-        assert report.retrieval_rounds == 2
-        assert report.verdict == "misleading_context"
+        assert report["retrieval_rounds"] == 2
+        assert report["verdict"] == "misleading_context"
 
 
 # ===========================================================================
@@ -751,8 +741,7 @@ class TestPipelineIntegration:
         self, segment, evidence_pool
     ):
         from pipeline import run_pipeline
-        from schemas.data_models import ExplainabilityReport
-
+        
         bundle = self._make_model_bundle()
         retriever = self._make_retriever(evidence_pool)
 
@@ -765,17 +754,16 @@ class TestPipelineIntegration:
             retriever=retriever,
         )
 
-        assert isinstance(report, ExplainabilityReport)
-        assert report.claim_id == "claim-001"
-        assert report.verdict in (
+        assert isinstance(report, dict)
+        assert report["claim_id"] == "claim-001"
+        assert report["verdict"] in (
             "supported", "refuted",
             "insufficient_evidence", "misleading_context",
         )
 
     def test_pipeline_insufficient_evidence_path(self, segment):
         from pipeline import run_pipeline
-        from schemas.data_models import ExplainabilityReport
-
+        
         # NLI always low → gate never passes → insufficient_evidence
         bundle = self._make_model_bundle(nli_score=0.05)
         retriever = MagicMock()
@@ -791,9 +779,9 @@ class TestPipelineIntegration:
             retriever=retriever,
         )
 
-        assert isinstance(report, ExplainabilityReport)
+        assert isinstance(report, dict)
         # Either insufficient_evidence or another valid verdict
-        assert report.verdict in (
+        assert report["verdict"] in (
             "supported", "refuted",
             "insufficient_evidence", "misleading_context",
         )

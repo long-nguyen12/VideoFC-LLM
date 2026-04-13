@@ -23,14 +23,6 @@ from dataclasses import dataclass, field
 
 import torch
 
-from schemas import (
-    ClaimDecomposition,
-    EvidenceRef,
-    EvidenceStrengthReport,
-    HopResult,
-    ModalConflictReport,
-    VideoSegment,
-)
 from models import NLIScorer, TextEncoder
 from modules.module3_evidence_strength import score_evidence
 
@@ -56,21 +48,21 @@ class DenseRetriever:
     """
 
     encoder: TextEncoder
-    _passages: list[EvidenceRef] = field(default_factory=list, repr=False)
+    _passages: list[dict] = field(default_factory=list, repr=False)
     _embeddings: torch.Tensor | None = field(default=None, repr=False)
 
-    def index(self, passages: list[EvidenceRef]) -> None:
+    def index(self, passages: list[dict]) -> None:
         """Encode and store a corpus of passages."""
         self._passages = passages
         if not passages:
             self._embeddings = None
             logger.debug("DenseRetriever: index cleared (0 passages).")
             return
-        texts = [p.passage_text for p in passages]
+        texts = [p["passage_text"] for p in passages]
         self._embeddings = self.encoder.encode(texts)   # (N, D)
         logger.info("DenseRetriever: indexed %d passages.", len(passages))
 
-    def search(self, query: str, top_k: int = 3) -> list[EvidenceRef]:
+    def search(self, query: str, top_k: int = 3) -> list[dict]:
         """
         Return the top-k passages most similar to the query.
         New passages get fresh UUIDs and hop_ids=[].
@@ -84,18 +76,18 @@ class DenseRetriever:
         k = min(top_k, len(self._passages))
         top_indices = torch.topk(scores, k).indices.tolist()
 
-        results: list[EvidenceRef] = []
+        results: list[dict] = []
         for idx in top_indices:
             src = self._passages[idx]
             results.append(
-                EvidenceRef(
-                    evidence_id=src.evidence_id,
-                    source_url=src.source_url,
-                    source_date=src.source_date,
-                    passage_text=src.passage_text,
-                    retrieval_score=float(scores[idx].item()),
-                    hop_ids=[],  # assigned by the caller after retrieval
-                )
+                {
+                    "evidence_id": src["evidence_id"],
+                    "source_url": src["source_url"],
+                    "source_date": src["source_date"],
+                    "passage_text": src["passage_text"],
+                    "retrieval_score": float(scores[idx].item()),
+                    "hop_ids": [],  # assigned by the caller after retrieval
+                }
             )
         return results
 
@@ -106,20 +98,20 @@ class DenseRetriever:
 
 def build_retrieval_query(
     weak_aspect: str,
-    resolved_hops: list[HopResult],
-    segment: VideoSegment,
+    resolved_hops: list[dict],
+    segment: dict,
 ) -> str:
     """
     Construct a retrieval query by combining the weak aspect with context
     from already-resolved hops and the segment transcript.
     """
     known_facts = " ".join(
-        h.answer for h in resolved_hops if not h.answer_unknown
+        h["answer"] for h in resolved_hops if not h["answer_unknown"]
     )
     query = weak_aspect
     if known_facts:
         query += f" Context: {known_facts}"
-    query += f" Video context: {segment.transcript[:200]}"
+    query += f" Video context: {segment['transcript'][:200]}"
     return query
 
 
@@ -128,15 +120,15 @@ def build_retrieval_query(
 # ---------------------------------------------------------------------------
 
 def gated_retrieval_loop(
-    claim: ClaimDecomposition,
-    segment: VideoSegment,
-    evidence: list[EvidenceRef],
-    modal_report: ModalConflictReport,
+    claim: dict,
+    segment: dict,
+    evidence: list[dict],
+    modal_report: dict,
     retriever: DenseRetriever,
     nli: NLIScorer,
     max_rounds: int = MAX_RETRIEVAL_ROUNDS,
-    resolved_hops: list[HopResult] | None = None,
-) -> tuple[list[EvidenceRef], EvidenceStrengthReport]:
+    resolved_hops: list[dict] | None = None,
+) -> tuple[list[dict], dict]:
     """
     Iteratively retrieve targeted evidence for weak sub-questions until
     the gate passes or max_rounds is exhausted.
@@ -157,49 +149,49 @@ def gated_retrieval_loop(
     (final_evidence, final_strength_report)
     """
     resolved_hops = resolved_hops or []
-    report: EvidenceStrengthReport | None = None
+    report = None
 
     for round_idx in range(max_rounds):
         report = score_evidence(claim, evidence, modal_report, nli)
 
-        if report.gate_pass or not report.weak_aspects:
+        if report["gate_pass"] or not report["weak_aspects"]:
             logger.info(
                 "Retrieval loop: gate passed after %d round(s) for claim %s.",
-                round_idx, claim.claim_id,
+                round_idx, claim["claim_id"],
             )
             break
 
         logger.info(
             "Retrieval round %d/%d — %d weak aspects for claim %s.",
-            round_idx + 1, max_rounds, len(report.weak_aspects), claim.claim_id,
+            round_idx + 1, max_rounds, len(report["weak_aspects"]), claim["claim_id"],
         )
 
-        for aspect in report.weak_aspects:
+        for aspect in report["weak_aspects"]:
             query = build_retrieval_query(aspect, resolved_hops, segment)
             new_passages = retriever.search(query, top_k=3)
 
             # Assign hop_ids based on which sub-question matched the aspect
             matched_hop = next(
-                (sq.hop for sq in claim.sub_questions if sq.question == aspect), None
+                (sq["hop"] for sq in claim["sub_questions"] if sq["question"] == aspect), None
             )
             for p in new_passages:
-                if matched_hop is not None and matched_hop not in p.hop_ids:
-                    p.hop_ids.append(matched_hop)
+                if matched_hop is not None and matched_hop not in p["hop_ids"]:
+                    p["hop_ids"].append(matched_hop)
 
             # Deduplicate by evidence_id
-            existing_ids = {e.evidence_id for e in evidence}
+            existing_ids = {e["evidence_id"] for e in evidence}
             for p in new_passages:
-                if p.evidence_id not in existing_ids:
+                if p["evidence_id"] not in existing_ids:
                     evidence.append(p)
-                    existing_ids.add(p.evidence_id)
+                    existing_ids.add(p["evidence_id"])
 
     # Final score in case we exhausted rounds without passing
-    if report is None or not report.gate_pass:
+    if report is None or not report["gate_pass"]:
         report = score_evidence(claim, evidence, modal_report, nli)
-        if not report.gate_pass:
+        if not report["gate_pass"]:
             logger.warning(
                 "Retrieval loop exhausted for claim %s — gate still not passed.",
-                claim.claim_id,
+                claim["claim_id"],
             )
 
     return evidence, report

@@ -25,8 +25,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)) + "/..")
 
 @pytest.fixture
 def segment():
-    from schemas.data_models import VideoSegment
-    return VideoSegment(
+        return dict(
         segment_id="seg-001",
         start_ts=0.0,
         end_ts=30.0,
@@ -37,9 +36,8 @@ def segment():
 
 @pytest.fixture
 def evidence_pool():
-    from schemas.data_models import EvidenceRef
-    return [
-        EvidenceRef(
+        return [
+        dict(
             evidence_id="ev-001",
             source_url="https://source.com/a",
             source_date="2024-01-10",
@@ -47,7 +45,7 @@ def evidence_pool():
             retrieval_score=0.91,
             hop_ids=[1],
         ),
-        EvidenceRef(
+        dict(
             evidence_id="ev-002",
             source_url="https://source.com/b",
             source_date="2024-01-12",
@@ -60,15 +58,14 @@ def evidence_pool():
 
 @pytest.fixture
 def claim_decomp():
-    from schemas.data_models import ClaimDecomposition, SubQuestion
-    return ClaimDecomposition(
+        return dict(
         claim_id="claim-001",
         claim_text="The bridge collapsed due to neglected maintenance.",
         segment_id="seg-001",
         sub_questions=[
-            SubQuestion(hop=1, question="Was maintenance neglected?",
+            dict(hop=1, question="Was maintenance neglected?",
                         depends_on_hops=[], evidence_type="web"),
-            SubQuestion(hop=2, question="Did the bridge collapse?",
+            dict(hop=2, question="Did the bridge collapse?",
                         depends_on_hops=[1], evidence_type="any"),
         ],
     )
@@ -76,8 +73,7 @@ def claim_decomp():
 
 @pytest.fixture
 def modal_report():
-    from schemas.data_models import ModalConflictReport
-    return ModalConflictReport(
+        return dict(
         segment_id="seg-001",
         vc_score=0.71, tc_score=0.65, vt_score=0.78,
         conflict_flag=False, dominant_conflict=None,
@@ -86,8 +82,7 @@ def modal_report():
 
 @pytest.fixture
 def strength_pass():
-    from schemas.data_models import EvidenceStrengthReport
-    return EvidenceStrengthReport(
+        return dict(
         claim_id="claim-001",
         coverage_score=0.80, confidence_score=0.72, consistency_score=0.65,
         gate_pass=True, weak_aspects=[],
@@ -96,14 +91,13 @@ def strength_pass():
 
 @pytest.fixture
 def hop_results():
-    from schemas.data_models import HopResult
-    return [
-        HopResult(claim_id="claim-001", hop=1,
+        return [
+        dict(claim_id="claim-001", hop=1,
                   question="Was maintenance neglected?",
                   answer="No — records confirm regular maintenance.",
                   confidence=0.85, answer_unknown=False,
                   supported_by=["ev-001"]),
-        HopResult(claim_id="claim-001", hop=2,
+        dict(claim_id="claim-001", hop=2,
                   question="Did the bridge collapse?",
                   answer="There is no evidence of a collapse.",
                   confidence=0.78, answer_unknown=False,
@@ -158,13 +152,13 @@ class TestGenerativeLLMCaps:
         import inspect
         from models.model_bundle import GenerativeLLM
         sig = inspect.signature(GenerativeLLM.__init__)
-        assert sig.parameters["max_new_tokens_cap"].default == 1024
+        assert sig.parameters["max_new_tokens_cap"]["default"] == 1024
 
     def test_default_context_window_is_4096(self):
         import inspect
         from models.model_bundle import GenerativeLLM
         sig = inspect.signature(GenerativeLLM.__init__)
-        assert sig.parameters["context_window"].default == 4096
+        assert sig.parameters["context_window"]["default"] == 4096
 
 
 # ===========================================================================
@@ -249,13 +243,13 @@ class TestLoadSingleLLMBundle:
         import inspect
         from models.model_bundle import load_single_llm_bundle
         sig = inspect.signature(load_single_llm_bundle)
-        assert sig.parameters["context_window"].default == 2048
+        assert sig.parameters["context_window"]["default"] == 2048
 
     def test_default_llm_is_qwen_15b(self):
         import inspect
         from models.model_bundle import load_single_llm_bundle
         sig = inspect.signature(load_single_llm_bundle)
-        assert "Qwen2.5-1.5B" in sig.parameters["llm_model"].default
+        assert "Qwen2.5-1.5B" in sig.parameters["llm_model"]["default"]
 
 
 # ===========================================================================
@@ -307,8 +301,8 @@ class TestModule1MaxSubQuestions:
             "Claim.", "c", segment, "", False, llm,
             max_sub_questions=3,
         )
-        assert len(result.sub_questions) == 3
-        assert result.sub_questions[-1].hop == 3
+        assert len(result["sub_questions"]) == 3
+        assert result["sub_questions"][-1].hop == 3
 
     def test_output_not_capped_when_under_limit(self, segment):
         """If LLM returns fewer than max_sub_questions, all are preserved."""
@@ -323,7 +317,7 @@ class TestModule1MaxSubQuestions:
         }
         result = decompose_claim("Claim.", "c", segment, "", False, _make_llm(resp),
                                  max_sub_questions=5)
-        assert len(result.sub_questions) == 2
+        assert len(result["sub_questions"]) == 2
 
     def test_claim_truncated_in_user_message(self, segment):
         """Claims longer than 200 chars must be truncated in the prompt."""
@@ -355,7 +349,7 @@ class TestModule1MaxSubQuestions:
         import inspect
         from modules.module1_claim_decomposer import decompose_claim
         sig = inspect.signature(decompose_claim)
-        assert sig.parameters["max_sub_questions"].default == 5
+        assert sig.parameters["max_sub_questions"]["default"] == 5
 
 
 # ===========================================================================
@@ -366,12 +360,11 @@ class TestModule6CompactPrompt:
 
     def test_hop_answers_capped_at_4(self, claim_decomp, segment,
                                      modal_report, strength_pass):
-        from schemas.data_models import HopResult
-        from modules.module6_verdict_aggregator import _format_hop_answers
+                from modules.module6_verdict_aggregator import _format_hop_answers
 
         # 6 hops
         hops = [
-            HopResult(claim_id="c", hop=i, question=f"Q{i}?",
+            dict(claim_id="c", hop=i, question=f"Q{i}?",
                       answer=f"Answer {i}.", confidence=0.8,
                       answer_unknown=False, supported_by=[])
             for i in range(1, 7)
@@ -382,11 +375,10 @@ class TestModule6CompactPrompt:
         assert "Hop 5" not in formatted or "truncated" in formatted
 
     def test_long_hop_answer_truncated(self):
-        from schemas.data_models import HopResult
-        from modules.module6_verdict_aggregator import _format_hop_answers
+                from modules.module6_verdict_aggregator import _format_hop_answers
 
         long_answer = "A" * 200
-        hops = [HopResult(claim_id="c", hop=1, question="Q?",
+        hops = [dict(claim_id="c", hop=1, question="Q?",
                           answer=long_answer, confidence=0.8,
                           answer_unknown=False, supported_by=[])]
         formatted = _format_hop_answers(hops)
@@ -396,13 +388,12 @@ class TestModule6CompactPrompt:
     def test_claim_truncated_in_aggregator_prompt(self, claim_decomp, segment,
                                                    modal_report, strength_pass):
         from modules.module6_verdict_aggregator import _build_aggregator_prompt
-        from schemas.data_models import ClaimDecomposition, SubQuestion
-
-        long_claim = ClaimDecomposition(
+        
+        long_claim = dict(
             claim_id="c",
             claim_text="X" * 300,
             segment_id="s",
-            sub_questions=[SubQuestion(hop=1, question="Q?",
+            sub_questions=[dict(hop=1, question="Q?",
                                        depends_on_hops=[], evidence_type="any")],
         )
         prompt = _build_aggregator_prompt(
@@ -444,8 +435,7 @@ class TestModule6CompactPrompt:
                                    modal_report, strength_pass):
         """aggregate_verdict must call llm.generate with max_new_tokens=512."""
         from modules.module6_verdict_aggregator import aggregate_verdict
-        from schemas.data_models import HopResult
-
+        
         verdict_resp = {
             "claim_id": "c", "verdict": "refuted", "confidence": 0.9,
             "reasoning_trace": [], "modal_conflict_used": False,
@@ -569,8 +559,7 @@ class TestDatasetPipelineMaxSubQuestions:
         from dataset.dataset_loader import DatasetLoader
         from dataset.dataset_adapter import record_to_pipeline_inputs
         from run_pipeline import run_dataset_pipeline
-        from schemas.data_models import ExplainabilityReport
-
+        
         record = DatasetLoader.from_dict(self.RAW_RECORD)
         inputs = record_to_pipeline_inputs(record)
         bundle = self._make_stub_bundle(max_sub=3)
@@ -581,8 +570,8 @@ class TestDatasetPipelineMaxSubQuestions:
             use_rationale_hints=True,
             max_sub_questions=3,
         )
-        assert isinstance(report, ExplainabilityReport)
-        assert report.verdict in (
+        assert isinstance(report, dict)
+        assert report["verdict"] in (
             "supported", "refuted", "insufficient_evidence", "misleading_context"
         )
 
@@ -612,7 +601,7 @@ class TestDatasetPipelineMaxSubQuestions:
             )
 
         assert result is not None
-        assert result.gold_verdict == "refuted"
+        assert result["gold_verdict"] == "refuted"
 
 
 # ===========================================================================
@@ -707,8 +696,7 @@ class TestSingleModelIntegration:
 
     def test_pipeline_returns_report_with_single_model(self, segment, evidence_pool):
         from pipeline import run_pipeline
-        from schemas.data_models import ExplainabilityReport
-        from modules.module4_targeted_retrieval import DenseRetriever
+                from modules.module4_targeted_retrieval import DenseRetriever
 
         bundle, _ = self._make_single_model_stub()
         retriever = MagicMock(spec=DenseRetriever)
@@ -723,10 +711,10 @@ class TestSingleModelIntegration:
             retriever=retriever,
         )
 
-        assert isinstance(report, ExplainabilityReport)
-        assert report.verdict == "refuted"
-        assert report.confidence == pytest.approx(0.90)
-        assert len(report.hop_summaries) == 3
+        assert isinstance(report, dict)
+        assert report["verdict"] == "refuted"
+        assert report["confidence"] == pytest.approx(0.90)
+        assert len(report["hop_summaries"]) == 3
 
     def test_generate_call_count_equals_decompose_plus_hops_plus_verdict_plus_summaries(
         self, segment, evidence_pool

@@ -28,15 +28,6 @@ import json
 import logging
 import re
 
-from schemas import (
-    ClaimDecomposition,
-    EvidenceStrengthReport,
-    FinalVerdict,
-    HopResult,
-    ModalConflictReport,
-    ReasoningStep,
-    VideoSegment,
-)
 from models import GenerativeLLM
 from modules.utils import safe_json_parse as _safe_json_parse
 
@@ -80,41 +71,41 @@ REQUIRED JSON SCHEMA:
 """
 
 
-def _format_hop_answers(hop_results: list[HopResult], max_hops: int = 4) -> str:
+def _format_hop_answers(hop_results: list[dict], max_hops: int = 4) -> str:
     lines = []
     for h in hop_results[:max_hops]:
-        status = "UNKNOWN" if h.answer_unknown else f"conf={h.confidence:.2f}"
+        status = "UNKNOWN" if h["answer_unknown"] else f"conf={h['confidence']:.2f}"
         # Truncate long answers to keep the prompt short for small models
-        answer = h.answer[:120] + "…" if len(h.answer) > 120 else h.answer
-        lines.append(f'Hop {h.hop}: Q: "{h.question[:80]}" → A: "{answer}" ({status})')
+        answer = h["answer"][:120] + "…" if len(h["answer"]) > 120 else h["answer"]
+        lines.append(f'Hop {h["hop"]}: Q: "{h["question"][:80]}" → A: "{answer}" ({status})')
     if len(hop_results) > max_hops:
         lines.append(f"… ({len(hop_results) - max_hops} more hops truncated)")
     return "\n".join(lines) if lines else "No hop answers available."
 
 
 def _build_aggregator_prompt(
-    claim: ClaimDecomposition,
-    segment: VideoSegment,
+    claim: dict,
+    segment: dict,
     visual_caption: str,
-    hop_results: list[HopResult],
-    modal_report: ModalConflictReport,
-    strength_report: EvidenceStrengthReport,
+    hop_results: list[dict],
+    modal_report: dict,
+    strength_report: dict,
 ) -> list[dict[str, str]]:
     # Truncate free-text fields so the total prompt fits in a small context window
     caption_short  = visual_caption[:120]
     conflict_line  = (
-        f"conflict={modal_report.conflict_flag}  dominant={modal_report.dominant_conflict}  "
-        f"vc={modal_report.vc_score:.2f}  tc={modal_report.tc_score:.2f}  vt={modal_report.vt_score:.2f}"
+        f"conflict={modal_report['conflict_flag']}  dominant={modal_report['dominant_conflict']}  "
+        f"vc={modal_report['vc_score']:.2f}  tc={modal_report['tc_score']:.2f}  vt={modal_report['vt_score']:.2f}"
     )
     gate_line = (
-        f"gate={'PASS' if strength_report.gate_pass else 'FAIL'}  "
-        f"cov={strength_report.coverage_score:.2f}  "
-        f"conf={strength_report.confidence_score:.2f}  "
-        f"cons={strength_report.consistency_score:.2f}"
+        f"gate={'PASS' if strength_report['gate_pass'] else 'FAIL'}  "
+        f"cov={strength_report['coverage_score']:.2f}  "
+        f"conf={strength_report['confidence_score']:.2f}  "
+        f"cons={strength_report['consistency_score']:.2f}"
     )
     user_content = (
-        f'Claim: "{claim.claim_text[:200]}"\n'
-        f'Claim ID: "{claim.claim_id}"\n'
+        f'Claim: "{claim["claim_text"][:200]}"\n'
+        f'Claim ID: "{claim["claim_id"]}"\n'
         f'Visual: "{caption_short}"\n\n'
         f"Hops:\n{_format_hop_answers(hop_results)}\n\n"
         f"Modal: {conflict_line}\n"
@@ -135,16 +126,16 @@ def _build_aggregator_prompt(
 # ---------------------------------------------------------------------------
 
 def aggregate_verdict(
-    claim: ClaimDecomposition,
-    segment: VideoSegment,
+    claim: dict,
+    segment: dict,
     visual_caption: str,
-    hop_results: list[HopResult],
-    modal_report: ModalConflictReport,
-    strength_report: EvidenceStrengthReport,
+    hop_results: list[dict],
+    modal_report: dict,
+    strength_report: dict,
     retrieval_rounds: int,
     llm: GenerativeLLM,
     max_retries: int = 2,
-) -> FinalVerdict:
+) -> dict:
     """
     Synthesise all pipeline signals into a final verdict.
 
@@ -162,73 +153,73 @@ def aggregate_verdict(
 
     Returns
     -------
-    FinalVerdict
+    dict
     """
     # If gate never passed, emit insufficient_evidence without calling the LLM
-    if not strength_report.gate_pass:
+    if not strength_report["gate_pass"]:
         logger.warning(
             "Claim %s: gate_pass=False after %d retrieval rounds. "
             "Emitting insufficient_evidence verdict.",
-            claim.claim_id, retrieval_rounds,
+            claim["claim_id"], retrieval_rounds,
         )
-        return FinalVerdict(
-            claim_id=claim.claim_id,
-            segment_id=segment.segment_id,
-            verdict="insufficient_evidence",
-            confidence=0.0,
-            reasoning_trace=[
-                ReasoningStep(
-                    step=1,
-                    finding=(
+        return {
+            "claim_id": claim["claim_id"],
+            "segment_id": segment["segment_id"],
+            "verdict": "insufficient_evidence",
+            "confidence": 0.0,
+            "reasoning_trace": [
+                {
+                    "step": 1,
+                    "finding": (
                         f"Evidence gate did not pass after {retrieval_rounds} "
                         f"retrieval round(s). Weak aspects: "
-                        f"{'; '.join(strength_report.weak_aspects)}"
+                        f"{'; '.join(strength_report['weak_aspects'])}"
                     ),
-                    source_hop=None,
-                    evidence_ids=[],
-                )
+                    "source_hop": None,
+                    "evidence_ids": [],
+                }
             ],
-            modal_conflict_used=modal_report.conflict_flag,
-            counterfactual=(
+            "modal_conflict_used": modal_report["conflict_flag"],
+            "counterfactual": (
                 "The verdict could change if sufficient evidence were found for: "
-                + "; ".join(strength_report.weak_aspects)
+                + "; ".join(strength_report["weak_aspects"])
             ),
-            retrieval_rounds=retrieval_rounds,
-            gate_passed=False,
-        )
+            "retrieval_rounds": retrieval_rounds,
+            "gate_passed": False,
+        }
 
     prompt = _build_aggregator_prompt(
         claim, segment, visual_caption,
         hop_results, modal_report, strength_report,
     )
 
-    last_exc: Exception | None = None
+    last_exc = None
     for attempt in range(max_retries + 1):
         try:
             raw = llm.generate(prompt, max_new_tokens=512)
             data = _safe_json_parse(raw)
 
             reasoning_trace = [
-                ReasoningStep(
-                    step=rs["step"],
-                    finding=rs["finding"],
-                    source_hop=rs.get("source_hop"),
-                    evidence_ids=rs.get("evidence_ids", []),
-                )
+                {
+                    "step": rs["step"],
+                    "finding": rs["finding"],
+                    "source_hop": rs.get("source_hop"),
+                    "evidence_ids": rs.get("evidence_ids", []),
+                }
                 for rs in data.get("reasoning_trace", [])
             ]
 
-            return FinalVerdict(
-                claim_id=data.get("claim_id", claim.claim_id),
-                segment_id=segment.segment_id,
-                verdict=data.get("verdict", "insufficient_evidence"),
-                confidence=float(data.get("confidence", 0.0)),
-                reasoning_trace=reasoning_trace,
-                modal_conflict_used=bool(data.get("modal_conflict_used", False)),
-                counterfactual=data.get("counterfactual", ""),
-                retrieval_rounds=retrieval_rounds,
-                gate_passed=strength_report.gate_pass,
-            )
+            return {
+                "claim_id": data.get("claim_id", claim["claim_id"]),
+                "segment_id": segment["segment_id"],
+                "verdict": data.get("verdict", "insufficient_evidence"),
+                "confidence": float(data.get("confidence", 0.0)),
+                "reasoning_trace": reasoning_trace,
+                "modal_conflict_used": bool(data.get("modal_conflict_used", False)),
+                "counterfactual": data.get("counterfactual", ""),
+                "retrieval_rounds": retrieval_rounds,
+                "gate_passed": strength_report["gate_pass"],
+            }
 
         except Exception as exc:
             last_exc = exc
@@ -238,21 +229,21 @@ def aggregate_verdict(
 
     # Fallback on complete failure
     logger.error("All aggregator attempts failed (%s). Using fallback verdict.", last_exc)
-    return FinalVerdict(
-        claim_id=claim.claim_id,
-        segment_id=segment.segment_id,
-        verdict="insufficient_evidence",
-        confidence=0.0,
-        reasoning_trace=[
-            ReasoningStep(
-                step=1,
-                finding=f"Aggregator LLM failed to produce a valid verdict: {last_exc}",
-                source_hop=None,
-                evidence_ids=[],
-            )
+    return {
+        "claim_id": claim["claim_id"],
+        "segment_id": segment["segment_id"],
+        "verdict": "insufficient_evidence",
+        "confidence": 0.0,
+        "reasoning_trace": [
+            {
+                "step": 1,
+                "finding": f"Aggregator LLM failed to produce a valid verdict: {last_exc}",
+                "source_hop": None,
+                "evidence_ids": [],
+            }
         ],
-        modal_conflict_used=modal_report.conflict_flag,
-        counterfactual="",
-        retrieval_rounds=retrieval_rounds,
-        gate_passed=strength_report.gate_pass,
-    )
+        "modal_conflict_used": modal_report["conflict_flag"],
+        "counterfactual": "",
+        "retrieval_rounds": retrieval_rounds,
+        "gate_passed": strength_report["gate_pass"],
+    }

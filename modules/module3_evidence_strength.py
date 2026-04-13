@@ -24,12 +24,6 @@ from __future__ import annotations
 
 import logging
 
-from schemas import (
-    ClaimDecomposition,
-    EvidenceRef,
-    EvidenceStrengthReport,
-    ModalConflictReport,
-)
 from models import NLIScorer
 
 logger = logging.getLogger(__name__)
@@ -52,12 +46,12 @@ THRESHOLDS: dict[str, float] = {
 # ---------------------------------------------------------------------------
 
 def score_evidence(
-    claim: ClaimDecomposition,
-    evidence: list[EvidenceRef],
-    modal_report: ModalConflictReport,
+    claim: dict,
+    evidence: list[dict],
+    modal_report: dict,
     nli: NLIScorer,
     thresholds: dict[str, float] = THRESHOLDS,
-) -> EvidenceStrengthReport:
+) -> dict:
     """
     Score the current evidence pool against all sub-questions.
 
@@ -71,37 +65,37 @@ def score_evidence(
 
     Returns
     -------
-    EvidenceStrengthReport
+    dict
     """
     hop_scores: dict[int, float] = {}
 
-    for sq in claim.sub_questions:
-        relevant = [e for e in evidence if sq.hop in e.hop_ids]
+    for sq in claim["sub_questions"]:
+        relevant = [e for e in evidence if sq["hop"] in e["hop_ids"]]
 
         if not relevant:
-            hop_scores[sq.hop] = 0.0
-            logger.debug("Hop %d: no relevant evidence.", sq.hop)
+            hop_scores[sq["hop"]] = 0.0
+            logger.debug("Hop %d: no relevant evidence.", sq["hop"])
             continue
 
         # Score each passage for this hop's question; keep the best
         per_passage_scores = [
-            nli.entailment_score(e.passage_text, sq.question)
+            nli.entailment_score(e["passage_text"], sq["question"])
             for e in relevant
         ]
-        hop_scores[sq.hop] = max(per_passage_scores)
-        logger.debug("Hop %d: best evidence score=%.3f", sq.hop, hop_scores[sq.hop])
+        hop_scores[sq["hop"]] = max(per_passage_scores)
+        logger.debug("Hop %d: best evidence score=%.3f", sq["hop"], hop_scores[sq["hop"]])
 
     n = len(hop_scores)
     if n == 0:
-        logger.warning("No hops found in claim %s — returning zero-score report.", claim.claim_id)
-        return EvidenceStrengthReport(
-            claim_id=claim.claim_id,
-            coverage_score=0.0,
-            confidence_score=0.0,
-            consistency_score=0.0,
-            gate_pass=False,
-            weak_aspects=[sq.question for sq in claim.sub_questions],
-        )
+        logger.warning("No hops found in claim %s — returning zero-score report.", claim["claim_id"])
+        return {
+            "claim_id": claim["claim_id"],
+            "coverage_score": 0.0,
+            "confidence_score": 0.0,
+            "consistency_score": 0.0,
+            "gate_pass": False,
+            "weak_aspects": [sq["question"] for sq in claim["sub_questions"]],
+        }
 
     coverage = sum(
         1 for s in hop_scores.values() if s > thresholds["min_hop_confidence"]
@@ -110,9 +104,9 @@ def score_evidence(
     confidence = sum(hop_scores.values()) / n
 
     consistency = min(
-        modal_report.vc_score,
-        modal_report.tc_score,
-        modal_report.vt_score,
+        modal_report["vc_score"],
+        modal_report["tc_score"],
+        modal_report["vt_score"],
     )
 
     gate_pass = (
@@ -122,23 +116,23 @@ def score_evidence(
     )
 
     # Identify sub-questions whose best evidence is below the per-hop floor
-    hop_index = {sq.hop: sq for sq in claim.sub_questions}
+    hop_index = {sq["hop"]: sq for sq in claim["sub_questions"]}
     weak_aspects = [
-        hop_index[hop].question
+        hop_index[hop]["question"]
         for hop, s in hop_scores.items()
         if s < thresholds["min_hop_confidence"]
     ]
 
     logger.info(
         "Claim %s — coverage=%.2f confidence=%.2f consistency=%.2f gate=%s weak=%d",
-        claim.claim_id, coverage, confidence, consistency, gate_pass, len(weak_aspects),
+        claim["claim_id"], coverage, confidence, consistency, gate_pass, len(weak_aspects),
     )
 
-    return EvidenceStrengthReport(
-        claim_id=claim.claim_id,
-        coverage_score=round(coverage, 4),
-        confidence_score=round(confidence, 4),
-        consistency_score=round(consistency, 4),
-        gate_pass=gate_pass,
-        weak_aspects=weak_aspects,
-    )
+    return {
+        "claim_id": claim["claim_id"],
+        "coverage_score": round(coverage, 4),
+        "confidence_score": round(confidence, 4),
+        "consistency_score": round(consistency, 4),
+        "gate_pass": gate_pass,
+        "weak_aspects": weak_aspects,
+    }

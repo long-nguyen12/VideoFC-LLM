@@ -32,7 +32,6 @@ from __future__ import annotations
 
 import logging
 
-from schemas import EvidenceRef, ExplainabilityReport, VideoSegment
 from models import ModelBundle
 from modules import (
     DenseRetriever,
@@ -51,11 +50,11 @@ logger = logging.getLogger(__name__)
 def run_pipeline(
     claim_text: str,
     claim_id: str,
-    segment: VideoSegment,
-    initial_evidence: list[EvidenceRef],
+    segment: dict,
+    initial_evidence: list[dict],
     models: ModelBundle,
     retriever: DenseRetriever,
-) -> ExplainabilityReport:
+) -> dict:
     """
     Execute the full fact-checking pipeline.
 
@@ -70,18 +69,18 @@ def run_pipeline(
 
     Returns
     -------
-    ExplainabilityReport
+    dict
         The sole public output. Contains the verdict, confidence, evidence
         saliency, modal annotations, hop summaries, and counterfactual.
     """
-    logger.info("=== Pipeline start | claim_id=%s segment=%s ===", claim_id, segment.segment_id)
+    logger.info("=== Pipeline start | claim_id=%s segment=%s ===", claim_id, segment["segment_id"])
 
     # ------------------------------------------------------------------
     # Step 1 — Visual captioning
     # Compute a single visual caption from keyframes.
     # ------------------------------------------------------------------
     logger.info("[1/7] Visual captioning")
-    visual_caption: str = models.caption_fn(segment.keyframes)
+    visual_caption: str = models.caption_fn(segment["keyframes"])
     print("DEBUG: Visual caption:\n", visual_caption)  # Debug print
     logger.debug("Visual caption: %s", visual_caption[:120])
 
@@ -93,8 +92,8 @@ def run_pipeline(
     modal_report = compute_modal_consistency(
         claim_text=claim_text,
         visual_caption=visual_caption,
-        transcript=segment.transcript,
-        segment_id=segment.segment_id,
+        transcript=segment["transcript"],
+        segment_id=segment["segment_id"],
         nli=models.nli,
     )
 
@@ -108,10 +107,10 @@ def run_pipeline(
         claim_id=claim_id,
         segment=segment,
         visual_caption=visual_caption,
-        conflict_flag=modal_report.conflict_flag,
+        conflict_flag=modal_report["conflict_flag"],
         llm=models.decomposer_llm,
     )
-    logger.info("Decomposed into %d sub-questions.", len(claim.sub_questions))
+    logger.info("Decomposed into %d sub-questions.", len(claim["sub_questions"]))
 
     # ------------------------------------------------------------------
     # Step 4 — Gated evidence retrieval
@@ -126,13 +125,13 @@ def run_pipeline(
         retriever=retriever,
         nli=models.nli,
     )
-    retrieval_rounds = 0 if strength_report.gate_pass else MAX_RETRIEVAL_ROUNDS
+    retrieval_rounds = 0 if strength_report["gate_pass"] else MAX_RETRIEVAL_ROUNDS
     logger.info(
         "Evidence gate: pass=%s | coverage=%.2f confidence=%.2f consistency=%.2f",
-        strength_report.gate_pass,
-        strength_report.coverage_score,
-        strength_report.confidence_score,
-        strength_report.consistency_score,
+        strength_report["gate_pass"],
+        strength_report["coverage_score"],
+        strength_report["confidence_score"],
+        strength_report["consistency_score"],
     )
 
     # ------------------------------------------------------------------
@@ -147,7 +146,7 @@ def run_pipeline(
         llm=models.hop_llm,
         retriever=retriever,
     )
-    known = sum(1 for h in hop_results if not h.answer_unknown)
+    known = sum(1 for h in hop_results if not h["answer_unknown"])
     logger.info("Completed %d/%d hops.", known, len(hop_results))
 
     # ------------------------------------------------------------------
@@ -165,7 +164,7 @@ def run_pipeline(
         retrieval_rounds=retrieval_rounds,
         llm=models.aggregator_llm,
     )
-    logger.info("Verdict: %s (confidence=%.2f)", verdict.verdict, verdict.confidence)
+    logger.info("Verdict: %s (confidence=%.2f)", verdict["verdict"], verdict["confidence"])
 
     # ------------------------------------------------------------------
     # Step 7 — Explainability
@@ -182,5 +181,5 @@ def run_pipeline(
         llm=models.hop_llm,
     )
 
-    logger.info("=== Pipeline complete | verdict=%s ===", report.verdict)
+    logger.info("=== Pipeline complete | verdict=%s ===", report.get("verdict", "unknown"))
     return report

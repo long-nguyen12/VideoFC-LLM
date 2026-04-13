@@ -25,13 +25,6 @@ import json
 import logging
 import re
 
-from schemas import (
-    ClaimDecomposition,
-    EvidenceRef,
-    HopResult,
-    SubQuestion,
-    VideoSegment,
-)
 from models import GenerativeLLM
 from modules.module4_targeted_retrieval import DenseRetriever, build_retrieval_query
 from modules.utils import safe_json_parse as _safe_json_parse
@@ -71,31 +64,31 @@ REQUIRED JSON SCHEMA:
 """
 
 
-def _format_passages(passages: list[EvidenceRef]) -> str:
+def _format_passages(passages: list[dict]) -> str:
     if not passages:
         return "No passages available."
     lines = []
     for p in passages:
-        lines.append(f"[{p.evidence_id}] ({p.source_url}, {p.source_date}): {p.passage_text}")
+        lines.append(f"[{p['evidence_id']}] ({p['source_url']}, {p['source_date']}): {p['passage_text']}")
     return "\n".join(lines)
 
 
 def _build_hop_prompt(
-    sq: SubQuestion,
+    sq: dict,
     prior_answers: dict[int, str],
-    passages: list[EvidenceRef],
+    passages: list[dict],
 ) -> list[dict[str, str]]:
     prior_text = ""
-    if sq.depends_on_hops and prior_answers:
+    if sq.get("depends_on_hops") and prior_answers:
         lines = [
             f"Previous answer (hop {hop}): \"{ans}\""
             for hop, ans in prior_answers.items()
-            if hop in sq.depends_on_hops
+            if hop in sq["depends_on_hops"]
         ]
         prior_text = "\n".join(lines) + "\n"
 
     user_content = (
-        f'Sub-question (hop {sq.hop}): "{sq.question}"\n'
+        f'Sub-question (hop {sq["hop"]}): "{sq["question"]}"\n'
         f"{prior_text}"
         f"Retrieved passages:\n{_format_passages(passages)}\n\n"
         "Answer concisely. Output ONLY valid JSON. Start your response with { and end with }."
@@ -114,13 +107,13 @@ def _build_hop_prompt(
 # ---------------------------------------------------------------------------
 
 def run_single_hop(
-    sq: SubQuestion,
+    sq: dict,
     prior_answers: dict[int, str],
-    passages: list[EvidenceRef],
+    passages: list[dict],
     llm: GenerativeLLM,
     claim_id: str = "",
     max_retries: int = 2,
-) -> HopResult:
+) -> dict:
     """
     Execute one hop with up to max_retries parse retries.
     Returns a HopResult with answer_unknown=True on total failure.
@@ -132,36 +125,36 @@ def run_single_hop(
             raw = llm.generate(prompt, max_new_tokens=256)
             data = _safe_json_parse(raw)
 
-            result = HopResult(
-                claim_id=claim_id,
-                hop=data.get("hop", sq.hop),
-                question=data.get("question", sq.question),
-                answer=data.get("answer", ""),
-                confidence=float(data.get("confidence", 0.0)),
-                answer_unknown=bool(data.get("answer_unknown", False)),
-                supported_by=data.get("supported_by", []),
-            )
+            result = {
+                "claim_id": claim_id,
+                "hop": data.get("hop", sq["hop"]),
+                "question": data.get("question", sq["question"]),
+                "answer": data.get("answer", ""),
+                "confidence": float(data.get("confidence", 0.0)),
+                "answer_unknown": bool(data.get("answer_unknown", False)),
+                "supported_by": data.get("supported_by", []),
+            }
 
             # Accept on first non-unknown result, or on final attempt
-            if not result.answer_unknown or attempt == max_retries:
+            if not result["answer_unknown"] or attempt == max_retries:
                 return result
 
-            logger.debug("Hop %d attempt %d: answer_unknown=True, retrying.", sq.hop, attempt + 1)
+            logger.debug("Hop %d attempt %d: answer_unknown=True, retrying.", sq["hop"], attempt + 1)
 
         except Exception as exc:
-            logger.warning("Hop %d attempt %d parse error: %s", sq.hop, attempt + 1, exc)
+            logger.warning("Hop %d attempt %d parse error: %s", sq["hop"], attempt + 1, exc)
 
     # Complete failure
-    logger.error("Hop %d failed after %d attempts — marking answer_unknown.", sq.hop, max_retries + 1)
-    return HopResult(
-        claim_id=claim_id,
-        hop=sq.hop,
-        question=sq.question,
-        answer="",
-        confidence=0.0,
-        answer_unknown=True,
-        supported_by=[],
-    )
+    logger.error("Hop %d failed after %d attempts — marking answer_unknown.", sq["hop"], max_retries + 1)
+    return {
+        "claim_id": claim_id,
+        "hop": sq["hop"],
+        "question": sq["question"],
+        "answer": "",
+        "confidence": 0.0,
+        "answer_unknown": True,
+        "supported_by": [],
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -169,12 +162,12 @@ def run_single_hop(
 # ---------------------------------------------------------------------------
 
 def run_multihop(
-    claim: ClaimDecomposition,
-    evidence: list[EvidenceRef],
-    segment: VideoSegment,
+    claim: dict,
+    evidence: list[dict],
+    segment: dict,
     llm: GenerativeLLM,
     retriever: DenseRetriever,
-) -> list[HopResult]:
+) -> list[dict]:
     """
     Execute all sub-questions in dependency order.
 
@@ -195,55 +188,55 @@ def run_multihop(
 
     Returns
     -------
-    list[HopResult]  — one per executed hop (may be shorter than sub_questions
+    list[dict]  — one per executed hop (may be shorter than sub_questions
                        if an unknown hop terminates the chain early).
     """
-    hop_results: list[HopResult] = []
+    hop_results: list[dict] = []
     unknown_hops: set[int] = set()
 
-    for sq in claim.sub_questions:
+    for sq in claim["sub_questions"]:
         # Skip if a dependency hop is unknown
-        if any(dep in unknown_hops for dep in sq.depends_on_hops):
+        if any(dep in unknown_hops for dep in sq.get("depends_on_hops", [])):
             logger.warning(
                 "Skipping hop %d — depends on unknown hop(s) %s.",
-                sq.hop, sq.depends_on_hops,
+                sq["hop"], sq.get("depends_on_hops", []),
             )
             hop_results.append(
-                HopResult(
-                    claim_id=claim.claim_id,
-                    hop=sq.hop,
-                    question=sq.question,
-                    answer="",
-                    confidence=0.0,
-                    answer_unknown=True,
-                    supported_by=[],
-                )
+                {
+                    "claim_id": claim["claim_id"],
+                    "hop": sq["hop"],
+                    "question": sq["question"],
+                    "answer": "",
+                    "confidence": 0.0,
+                    "answer_unknown": True,
+                    "supported_by": [],
+                }
             )
-            unknown_hops.add(sq.hop)
+            unknown_hops.add(sq["hop"])
             continue
 
         # Gather evidence for this hop
-        relevant = [e for e in evidence if sq.hop in e.hop_ids]
+        relevant = [e for e in evidence if sq["hop"] in e["hop_ids"]]
 
         # If no evidence is pre-assigned and hop is not video-only, retrieve on the fly
-        if not relevant and sq.evidence_type != "video":
-            query = build_retrieval_query(sq.question, hop_results, segment)
+        if not relevant and sq.get("evidence_type", "any") != "video":
+            query = build_retrieval_query(sq["question"], hop_results, segment)
             retrieved = retriever.search(query, top_k=3)
             for p in retrieved:
-                if sq.hop not in p.hop_ids:
-                    p.hop_ids.append(sq.hop)
-            existing_ids = {e.evidence_id for e in evidence}
+                if sq["hop"] not in p["hop_ids"]:
+                    p["hop_ids"].append(sq["hop"])
+            existing_ids = {e["evidence_id"] for e in evidence}
             for p in retrieved:
-                if p.evidence_id not in existing_ids:
+                if p["evidence_id"] not in existing_ids:
                     evidence.append(p)
             relevant = retrieved
 
-        prior = {h.hop: h.answer for h in hop_results if h.hop in sq.depends_on_hops}
+        prior = {h["hop"]: h["answer"] for h in hop_results if h["hop"] in sq.get("depends_on_hops", [])}
 
-        result = run_single_hop(sq, prior, relevant, llm, claim_id=claim.claim_id)
+        result = run_single_hop(sq, prior, relevant, llm, claim_id=claim["claim_id"])
         hop_results.append(result)
 
-        if result.answer_unknown:
-            unknown_hops.add(sq.hop)
+        if result["answer_unknown"]:
+            unknown_hops.add(sq["hop"])
 
     return hop_results

@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import logging
 
-from schemas import ModalConflictReport
 from models import NLIScorer
 
 logger = logging.getLogger(__name__)
@@ -44,7 +43,7 @@ def compute_modal_consistency(
     segment_id: str,
     nli: NLIScorer,
     conflict_floor: float = NLI_CONFLICT_FLOOR,
-) -> ModalConflictReport:
+) -> dict:
     """
     Score cross-modal consistency and return a ModalConflictReport.
 
@@ -59,7 +58,7 @@ def compute_modal_consistency(
 
     Returns
     -------
-    ModalConflictReport
+    dict
     """
     logger.debug("Computing cross-modal consistency for segment %s", segment_id)
 
@@ -86,11 +85,11 @@ def compute_modal_consistency(
     else:
         logger.debug("Segment %s: no modal conflict. Scores=%s", segment_id, scores)
 
-    return ModalConflictReport(
-        segment_id=segment_id,
-        vc_score=round(vc, 4),
-        tc_score=round(tc, 4),
-        vt_score=round(vt, 4),
-        conflict_flag=conflict_flag,
-        dominant_conflict=dominant_conflict,
-    )
+    return {
+        "segment_id": segment_id,
+        "vc_score": round(vc, 4),
+        "tc_score": round(tc, 4),
+        "vt_score": round(vt, 4),
+        "conflict_flag": conflict_flag,
+        "dominant_conflict": dominant_conflict,
+    }
