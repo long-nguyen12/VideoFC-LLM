@@ -69,7 +69,7 @@ class VisualCaptioner:
     def __init__(self, model_name: str = DEFAULT_MODEL, device: Optional[torch.device] = None):
         from transformers import Qwen2VLForConditionalGeneration, AutoProcessor
         self.device = device or _device()
-        logger.info("Loading visual captioner: %s", model_name)
+        logger.debug("Loading visual captioner: %s", model_name)
         self.processor = AutoProcessor.from_pretrained(model_name)
         self.model = Qwen2VLForConditionalGeneration.from_pretrained(
             model_name,
@@ -129,7 +129,7 @@ class NLIScorer:
 
     def __init__(self, model_name: str = DEFAULT_MODEL, device: Optional[torch.device] = None):
         self.device = device or _device()
-        logger.info("Loading NLI scorer: %s", model_name)
+        logger.debug("Loading NLI scorer: %s", model_name)
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.model = AutoModelForSequenceClassification.from_pretrained(model_name).to(self.device)
         self.model.eval()
@@ -169,7 +169,7 @@ class TextEncoder:
 
     def __init__(self, model_name: str = DEFAULT_MODEL, device: Optional[torch.device] = None):
         self.device = device or _device()
-        logger.info("Loading text encoder: %s", model_name)
+        logger.debug("Loading text encoder: %s", model_name)
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.model = AutoModel.from_pretrained(model_name).to(self.device)
         self.model.eval()
@@ -242,7 +242,7 @@ class GenerativeLLM:
         self.device = device or _device()
         self.max_new_tokens_cap = max_new_tokens_cap
         self.context_window = context_window
-        logger.info("Loading generative LLM: %s  (max_new_tokens_cap=%d, context_window=%d)",
+        logger.debug("Loading generative LLM: %s  (max_new_tokens_cap=%d, context_window=%d)",
                     model_name, max_new_tokens_cap, context_window)
 
         quantization_config = None
@@ -405,7 +405,7 @@ def load_single_llm_bundle(
                  the same GenerativeLLM instance.
     """
     device = _device()
-    logger.info(
+    logger.debug(
         "Loading single-LLM bundle: llm=%s  captioner=%s  4bit=%s  ctx=%d",
         llm_model, captioner_model, load_in_4bit, context_window,
     )
