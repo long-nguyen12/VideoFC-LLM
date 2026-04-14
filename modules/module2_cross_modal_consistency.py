@@ -11,29 +11,6 @@ logger = logging.getLogger(__name__)
 NLI_CONFLICT_FLOOR: float = 0.40
 
 
-_LLM_MODAL_SYSTEM_PROMPT = """\
-You are a strict cross-modal consistency scorer for fact-checking.
-
-Compare three pairs and score consistency in [0, 1]:
-- V↔C: visual_caption vs claim
-- T↔C: transcript vs claim
-- V↔T: visual_caption vs transcript
-
-If article/content text is provided, also score:
-- A↔C: article_content vs claim
-
-OUTPUT FORMAT RULES (MANDATORY):
-1. Return ONLY valid JSON.
-2. No markdown/code fences/explanations.
-3. Use exactly these keys:
-   - "vc_score": number in [0, 1]
-   - "tc_score": number in [0, 1]
-   - "vt_score": number in [0, 1]
-   - "ac_score": number in [0, 1] or null
-   - "dominant_conflict": one of "V↔C", "T↔C", "V↔T", "A↔C", or null
-"""
-
-
 def _clamp_01(value: object) -> float:
     try:
         score = float(value)
@@ -42,22 +19,65 @@ def _clamp_01(value: object) -> float:
     return max(0.0, min(1.0, score))
 
 
+_LLM_MODAL_SYSTEM_PROMPT = """\
+You are a strict cross-modal consistency scorer for fact-checking.
+
+Compare the following input pairs and assign a consistency score in [0, 1] for each:
+- V↔C (visual_caption vs claim): Score how well the visual description supports or contradicts the claim.
+- T↔C (transcript vs claim): Score how well the spoken transcript supports or contradicts the claim.
+- V↔T (visual_caption vs transcript): Score alignment between visual content and spoken words.
+- A↔C (article_content vs claim, optional): Score only if article_content is provided and non-empty.
+
+SCORING GUIDELINES:
+- 1.0 = fully consistent, no contradictions
+- 0.5 = partially consistent, minor conflicts or ambiguity
+- 0.0 = directly contradictory or unrelated
+- If a pair cannot be evaluated due to missing or insufficient input, return null for that score.
+
+OUTPUT FORMAT RULES (MANDATORY):
+1. Respond ONLY with a valid JSON object. Do not include markdown, code blocks, explanations, greetings, or any text outside the JSON.
+2. Use double quotes for ALL keys and string values. Single quotes are invalid JSON.
+3. Ensure proper JSON escaping for special characters (e.g., \\", \\\\, \\n).
+4. Do not include trailing commas, comments, or schema annotations in the output.
+5. The "dominant_conflict" field must be exactly one of: "V↔C", "T↔C", "V↔T", "A↔C", or null. Set to null if no clear conflict exists or if all scores are >= 0.7.
+6. If input is missing or ambiguous for all pairs, return: {{"vc_score": null, "tc_score": null, "vt_score": null, "ac_score": null, "dominant_conflict": null}}
+
+REQUIRED JSON SCHEMA:
+{{
+  "vc_score": <number in [0, 1] or null>,
+  "tc_score": <number in [0, 1] or null>,
+  "vt_score": <number in [0, 1] or null>,
+  "ac_score": <number in [0, 1] or null>,
+  "dominant_conflict": "<one of: V↔C | T↔C | V↔T | A↔C>" or null
+}}
+"""
+
+
 def _build_modal_llm_prompt(
     claim_text: str,
     visual_caption: str,
     transcript: str,
     content: str = "",
 ) -> list[dict[str, str]]:
+    # Escape double quotes in inputs to prevent JSON injection issues
+    def _escape_for_prompt(s: str) -> str:
+        return s.replace('"', '\\"').replace("\\\\", "\\")
+
+    claim_esc = _escape_for_prompt(claim_text)
+    visual_esc = _escape_for_prompt(visual_caption)
+    transcript_esc = _escape_for_prompt(transcript)
+    content_esc = _escape_for_prompt(content) if content.strip() else ""
+
     content_block = ""
     if content.strip():
-        content_block = f'Article/content: "{content}"\n\n'
+        content_block = f'Article/content: "{content_esc}"\n\n'
 
     user_content = (
-        f'Claim: "{claim_text}"\n'
-        f'Visual caption: "{visual_caption}"\n'
-        f'Transcript: "{transcript}"\n\n'
+        f'Claim: "{claim_esc}"\n'
+        f'Visual caption: "{visual_esc}"\n'
+        f'Transcript: "{transcript_esc}"\n\n'
         f"{content_block}"
-        "Output JSON only."
+        "Respond with valid JSON only. No other text."
     )
     return [
         {"role": "system", "content": _LLM_MODAL_SYSTEM_PROMPT},
