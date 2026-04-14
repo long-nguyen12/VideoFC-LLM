@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 
-from models import GenerativeLLM, NLIScorer
+from models import GenerativeLLM
 from modules.utils import safe_json_parse as _safe_json_parse
 
 logger = logging.getLogger(__name__)
@@ -83,40 +83,6 @@ def _build_modal_llm_prompt(
         {"role": "system", "content": _LLM_MODAL_SYSTEM_PROMPT},
         {"role": "user", "content": user_content},
     ]
-
-
-def compute_modal_consistency(
-    claim_text: str,
-    visual_caption: str,
-    transcript: str,
-    segment_id: str,
-    nli: NLIScorer,
-    conflict_floor: float = NLI_CONFLICT_FLOOR,
-) -> dict:
-    logger.debug("Computing cross-modal consistency for segment %s", segment_id)
-
-    vc = nli.entailment_score(visual_caption, claim_text)
-    tc = nli.entailment_score(transcript, claim_text)
-    vt = nli.entailment_score(visual_caption, transcript)
-
-    scores: dict[str, float] = {
-        "V↔C": vc,
-        "T↔C": tc,
-        "V↔T": vt,
-    }
-    conflict_flag = any(s < conflict_floor for s in scores.values())
-    dominant_conflict: str | None = (
-        min(scores, key=scores.get) if conflict_flag else None
-    )
-
-    return {
-        "segment_id": segment_id,
-        "vc_score": round(vc, 4),
-        "tc_score": round(tc, 4),
-        "vt_score": round(vt, 4),
-        "conflict_flag": conflict_flag,
-        "dominant_conflict": dominant_conflict,
-    }
 
 
 def compute_modal_consistency_llm(
