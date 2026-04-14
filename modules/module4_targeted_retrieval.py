@@ -86,7 +86,8 @@ class DenseRetriever:
                     "source_date": src["source_date"],
                     "passage_text": src["passage_text"],
                     "retrieval_score": float(scores[idx].item()),
-                    "hop_ids": [],  # assigned by the caller after retrieval
+                    # Preserve existing hop_ids and allow caller to append a matched hop.
+                    "hop_ids": list(src.get("hop_ids", [])),
                 }
             )
         return results
@@ -178,12 +179,23 @@ def gated_retrieval_loop(
                 if matched_hop is not None and matched_hop not in p["hop_ids"]:
                     p["hop_ids"].append(matched_hop)
 
-            # Deduplicate by evidence_id
-            existing_ids = {e["evidence_id"] for e in evidence}
+            # Deduplicate by evidence_id, but merge hop_ids back into existing rows.
+            existing_by_id = {e["evidence_id"]: e for e in evidence}
             for p in new_passages:
-                if p["evidence_id"] not in existing_ids:
+                existing = existing_by_id.get(p["evidence_id"])
+                if existing is None:
                     evidence.append(p)
-                    existing_ids.add(p["evidence_id"])
+                    existing_by_id[p["evidence_id"]] = p
+                    continue
+
+                existing_hops = existing.setdefault("hop_ids", [])
+                for hop_id in p.get("hop_ids", []):
+                    if hop_id not in existing_hops:
+                        existing_hops.append(hop_id)
+                existing["retrieval_score"] = max(
+                    float(existing.get("retrieval_score", 0.0)),
+                    float(p.get("retrieval_score", 0.0)),
+                )
 
     # Final score in case we exhausted rounds without passing
     if report is None or not report["gate_pass"]:

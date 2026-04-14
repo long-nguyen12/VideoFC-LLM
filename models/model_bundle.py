@@ -308,9 +308,9 @@ class GenerativeLLM:
         if do_sample:
             kwargs["temperature"] = temperature
         else:
-            kwargs["temperature"] = None
-            kwargs["top_p"] = None
-            kwargs["top_k"] = None
+            kwargs["temperature"] = 1
+            kwargs["top_p"] = 0.7
+            kwargs["top_k"] = 0.6
 
         output_ids = self.model.generate(**inputs, **kwargs)
         generated = output_ids[0, input_len:]

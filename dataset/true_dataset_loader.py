@@ -107,10 +107,28 @@ def _assign_hop_ids(
     hop_map = {e.get("evidence_index", 0): [] for e in evidence_entries}
     evidence_to_hop = {}
     next_hop = 1
-    claim_rels = [r for r in relationships if r.get("left") == "claim"]
-    other_rels = [r for r in relationships if r.get("left") != "claim"]
-    for rel in claim_rels + other_rels:
-        idx = rel.get("evidence_index", 0)
+
+    parsed_rels: list[tuple[str, int]] = []
+    for rel in relationships:
+        if isinstance(rel, dict):
+            if "left" in rel and "evidence_index" in rel:
+                left = str(rel.get("left", ""))
+                idx = int(rel.get("evidence_index", 0) or 0)
+                parsed_rels.append((left, idx))
+                continue
+
+            # Legacy format: {"<claim,evidence7>": "..."}
+            for key in rel.keys():
+                m = re.match(r"<\s*([^,>]+)\s*,\s*evidence(\d+)\s*>", str(key), re.I)
+                if not m:
+                    continue
+                left = m.group(1).strip().lower()
+                idx = int(m.group(2))
+                parsed_rels.append((left, idx))
+
+    claim_rels = [r for r in parsed_rels if r[0] == "claim"]
+    other_rels = [r for r in parsed_rels if r[0] != "claim"]
+    for _, idx in claim_rels + other_rels:
         if idx == 0 or idx not in hop_map:
             continue
         if idx not in evidence_to_hop:
@@ -146,7 +164,30 @@ def record_to_visual_caption(record: dict) -> str:
 def record_to_evidence(record: dict) -> list[dict]:
     vi = record.get("video_information", {})
     iso_date = _yyyymmdd_to_iso(vi.get("video_date", 0))
-    evidences = record.get("evidences", {}).get("entries", [])
+    evidences_obj = record.get("evidences", {}) or {}
+    evidences = evidences_obj.get("entries", [])
+    if not evidences:
+        # Legacy TRUE format: evidences.evidence1..evidenceN = [passage_text, [urls]]
+        for key, value in evidences_obj.items():
+            m = re.match(r"^evidence(\d+)$", str(key), re.I)
+            if not m:
+                continue
+            idx = int(m.group(1))
+            if isinstance(value, (list, tuple)) and len(value) >= 1:
+                passage_text = str(value[0] or "")
+                urls = value[1] if len(value) >= 2 and isinstance(value[1], list) else []
+            else:
+                passage_text = str(value or "")
+                urls = []
+            evidences.append(
+                {
+                    "evidence_index": idx,
+                    "passage_text": passage_text,
+                    "urls": urls,
+                }
+            )
+        evidences = sorted(evidences, key=lambda x: int(x.get("evidence_index", 0)))
+
     relationships = record.get("relationship_with_evidence", [])
     hop_map = _assign_hop_ids(evidences, relationships)
     res = []
