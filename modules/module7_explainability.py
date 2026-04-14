@@ -116,14 +116,7 @@ def build_modal_annotations(
     return annotations
 
 
-_SUMMARY_SYSTEM_PROMPT = """\
-You are an explainability assistant for a video fact-checking system.
-Given one intermediate reasoning answer and its supporting evidence IDs,
-write exactly one plain-language sentence that a non-expert could read.
-
-Respond ONLY with valid JSON:
-{"summary": "<exactly one sentence>"}
-"""
+from modules.prompt_template import _SUMMARY_SYSTEM_PROMPT
 
 
 def _build_summary_prompt(hop: dict) -> list[dict[str, str]]:

@@ -6,6 +6,9 @@ import re
 
 from models import GenerativeLLM
 from modules.utils import safe_json_parse as _safe_json_parse
+from modules.prompt_template import (
+    _DECOMPOSITION_PROMPT_TEMPLATE as _SYSTEM_PROMPT_TEMPLATE,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -13,36 +16,6 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Prompt builders
 # ---------------------------------------------------------------------------
-
-_SYSTEM_PROMPT_TEMPLATE = """\
-You are a claim decomposer for a video fact-checking system.
-Given a composite claim and a video context summary, decompose the claim
-into an ordered list of atomic sub-questions. Each sub-question must be:
-- independently verifiable
-- answerable from external evidence or the video content
-- ordered so that earlier answers can condition later questions
-- Produce at most {max_sub_questions} sub-questions.
-
-OUTPUT FORMAT RULES (MANDATORY):
-1. Respond ONLY with a valid JSON object. Do not include markdown, code blocks, explanations, greetings, or any text outside the JSON.
-2. Use double quotes for ALL keys and string values. Single quotes are invalid JSON and will cause parsing errors.
-3. Ensure proper JSON escaping for special characters (e.g., \\", \\\\, \\n).
-4. Do not include trailing commas, comments, or schema annotations in the output.
-5. If decomposition is impossible or input is ambiguous, return: {{"claim_id": null, "sub_questions": [], "error": "brief reason"}}
-
-REQUIRED JSON SCHEMA:
-{{
-  "claim_id": "<string or null>",
-  "sub_questions": [
-    {{
-      "hop": <integer starting at 1>,
-      "question": "<string>",
-      "depends_on_hops": [<integer>, ...],
-      "evidence_type": "video" | "web" | "kb" | "any"
-    }}
-  ]
-}}
-"""
 
 
 def _build_user_message(
@@ -154,6 +127,7 @@ def decompose_claim(
             ],
         }
 
+    data = _normalize_decomposition_output(data, claim_id)
     is_valid, err_msg = _validate_decomposition_output(data, claim_id)
     if not is_valid:
         logger.warning(
@@ -206,6 +180,42 @@ def decompose_claim(
         "segment_id": segment["segment_id"],
         "sub_questions": sub_questions,
     }
+
+
+def _normalize_decomposition_output(data: dict, claim_id: str) -> dict:
+    """
+    Normalize common near-miss outputs into the required schema.
+    This prevents dropping to fallback when the model emits a single
+    sub-question object at the top level.
+    """
+    if not isinstance(data, dict):
+        return data
+
+    normalized = dict(data)
+
+    # Common case: model returns one sub-question object directly.
+    if (
+        "sub_questions" not in normalized
+        and "hop" in normalized
+        and "question" in normalized
+    ):
+        single_sq = {
+            "hop": normalized.get("hop", 1),
+            "question": normalized.get("question", ""),
+            "depends_on_hops": normalized.get("depends_on_hops", []),
+            "evidence_type": normalized.get("evidence_type", "any"),
+        }
+        normalized = {
+            "claim_id": claim_id,
+            "sub_questions": [single_sq],
+        }
+        return normalized
+
+    # Sometimes sub_questions is emitted as a single object instead of a list.
+    if isinstance(normalized.get("sub_questions"), dict):
+        normalized["sub_questions"] = [normalized["sub_questions"]]
+
+    return normalized
 
 
 def _validate_decomposition_output(data: dict, claim_id: str) -> tuple[bool, str]:

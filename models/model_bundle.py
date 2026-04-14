@@ -281,26 +281,23 @@ class GenerativeLLM:
             except json.JSONDecodeError:
                 return None
 
-        # Pre-process: escape literal newlines inside string values
-        # Strategy 1: Try parsing preprocessed text
         parsed = _try_load_dict(text)
         if parsed is not None:
             return parsed
         try:
-            # Keep debug context from the previous behavior for faster triage.
             preprocessed = GenerativeLLM._escape_literal_newlines_in_json(text)
             json.loads(preprocessed)
         except json.JSONDecodeError as e:
             logger.debug("Preprocessed parse failed at pos %d: %s", e.pos, e.msg)
-            # Log context for debugging
             if e.pos < len(preprocessed):
                 ctx_start = max(0, e.pos - 40)
                 ctx_end = min(len(preprocessed), e.pos + 40)
                 logger.debug("Error context: %r", preprocessed[ctx_start:ctx_end])
 
-        # Strategy 2: Try all brace-matched JSON object candidates.
         cleaned = text.strip()
         starts = [i for i, ch in enumerate(cleaned) if ch == "{"]
+        best_parsed = None
+        best_span = -1
         for start in starts:
             depth, end, in_str, esc = 0, -1, False, False
             for i, c in enumerate(cleaned[start:], start):
@@ -327,7 +324,12 @@ class GenerativeLLM:
             candidate = cleaned[start:end]
             parsed = _try_load_dict(candidate)
             if parsed is not None:
-                return parsed
+                span = end - start
+                if span > best_span:
+                    best_span = span
+                    best_parsed = parsed
+        if best_parsed is not None:
+            return best_parsed
 
         # Strategy 3: shared fallback parser for compatibility with other modules.
         fallback = _safe_json_parse(text)

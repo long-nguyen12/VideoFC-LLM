@@ -12,15 +12,7 @@ logger = logging.getLogger(__name__)
 
 MAX_RETRIEVAL_ROUNDS: int = 3
 
-_RETRIEVE_SCORE_SYSTEM_PROMPT = """\
-You are a passage ranking model for fact-checking retrieval.
-Given one query and one passage, estimate relevance for answering the query.
-
-Return ONLY valid JSON:
-{
-  "score": <float in [0.0, 1.0]>
-}
-"""
+from modules.prompt_template import _RETRIEVE_SCORE_SYSTEM_PROMPT
 
 
 def _clamp_01(value: object) -> float:

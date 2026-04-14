@@ -14,37 +14,7 @@ logger = logging.getLogger(__name__)
 # Prompt builders
 # ---------------------------------------------------------------------------
 
-_AGGREGATOR_SYSTEM_PROMPT = """\
-You are a fact-checking verdict aggregator.
-Given a claim, hop answers, a cross-modal conflict report, and evidence gate status, produce a verdict.
-
-OUTPUT FORMAT RULES (MANDATORY):
-1. Respond ONLY with a valid JSON object. Do not include markdown, code blocks, explanations, greetings, or any text outside the JSON.
-2. Use double quotes for ALL keys and string values. Single quotes are invalid JSON and will cause parsing errors.
-3. Ensure proper JSON escaping for special characters (e.g., \\", \\\\, \\n).
-4. Do not include trailing commas, comments, or schema annotations in the output.
-5. The "reasoning_trace" array must contain at most 3 steps. Each "finding" must be under 20 words.
-6. The "counterfactual" field must contain exactly one sentence.
-7. The "verdict" field must be exactly one of: "yes" or "no".
-8. The "confidence" field must be a float between 0.0 and 1.0, inclusive.
-
-REQUIRED JSON SCHEMA:
-{{
-  "claim_id": "<string>",
-  "verdict": "<one of: yes | no >",
-  "confidence": <float 0.0-1.0>,
-  "reasoning_trace": [
-    {{
-      "step": <integer starting at 1>,
-      "finding": "<string, under 20 words>",
-      "source_hop": <integer or null>,
-      "evidence_ids": ["<string>"]
-    }}
-  ],
-  "modal_conflict_used": <true | false>,
-  "counterfactual": "<string, exactly one sentence>"
-}}
-"""
+from modules.prompt_template import _AGGREGATOR_SYSTEM_PROMPT
 
 
 def _format_hop_answers(hop_results: list[dict], max_hops: int = 4) -> str:

@@ -19,38 +19,9 @@ def _clamp_01(value: object) -> float:
     return max(0.0, min(1.0, score))
 
 
-_LLM_MODAL_SYSTEM_PROMPT = """\
-You are a strict cross-modal consistency scorer for fact-checking.
-
-Compare the following input pairs and assign a consistency score in [0, 1] for each:
-- V↔C (visual_caption vs claim): Score how well the visual description supports or contradicts the claim.
-- T↔C (transcript vs claim): Score how well the spoken transcript supports or contradicts the claim.
-- V↔T (visual_caption vs transcript): Score alignment between visual content and spoken words.
-- A↔C (article_content vs claim, optional): Score only if article_content is provided and non-empty.
-
-SCORING GUIDELINES:
-- 1.0 = fully consistent, no contradictions
-- 0.5 = partially consistent, minor conflicts or ambiguity
-- 0.0 = directly contradictory or unrelated
-- If a pair cannot be evaluated due to missing or insufficient input, return null for that score.
-
-OUTPUT FORMAT RULES (MANDATORY):
-1. Respond ONLY with a valid JSON object. Do not include markdown, code blocks, explanations, greetings, or any text outside the JSON.
-2. Use double quotes for ALL keys and string values. Single quotes are invalid JSON.
-3. Ensure proper JSON escaping for special characters (e.g., \\", \\\\, \\n).
-4. Do not include trailing commas, comments, or schema annotations in the output.
-5. The "dominant_conflict" field must be exactly one of: "V↔C", "T↔C", "V↔T", "A↔C", or null. Set to null if no clear conflict exists or if all scores are >= 0.7.
-6. If input is missing or ambiguous for all pairs, return: {{"vc_score": null, "tc_score": null, "vt_score": null, "ac_score": null, "dominant_conflict": null}}
-
-REQUIRED JSON SCHEMA:
-{{
-  "vc_score": <number in [0, 1] or null>,
-  "tc_score": <number in [0, 1] or null>,
-  "vt_score": <number in [0, 1] or null>,
-  "ac_score": <number in [0, 1] or null>,
-  "dominant_conflict": "<one of: V↔C | T↔C | V↔T | A↔C>" or null
-}}
-"""
+from modules.prompt_template import (
+    _DECOMPOSITION_PROMPT_TEMPLATE as _LLM_MODAL_SYSTEM_PROMPT,
+)
 
 
 def _build_modal_llm_prompt(

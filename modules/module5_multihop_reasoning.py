@@ -15,32 +15,7 @@ logger = logging.getLogger(__name__)
 # Prompt builders
 # ---------------------------------------------------------------------------
 
-_HOP_SYSTEM_PROMPT = """\
-You are a single-hop evidence reader for a video fact-checking system.
-You receive one atomic sub-question, optionally an answer from a previous hop,
-and a set of retrieved evidence passages.
-Produce a concise intermediate answer (≤ 2 sentences) with citations.
-
-OUTPUT FORMAT RULES (MANDATORY):
-1. Respond ONLY with a valid JSON object. Do not include markdown, code blocks, explanations, greetings, or any text outside the JSON.
-2. Use double quotes for ALL keys and string values. Single quotes are invalid JSON and will cause parsing errors.
-3. Ensure proper JSON escaping for special characters (e.g., \\", \\\\, \\n).
-4. Do not include trailing commas, comments, or schema annotations in the output.
-5. The "answer" field must contain at most 2 sentences. Keep it concise and factual.
-6. The "confidence" field must be a float between 0.0 and 1.0, inclusive.
-7. The "supported_by" field must be a list of evidence_id strings from the provided passages.
-8. Set "answer_unknown" to true ONLY if the passages genuinely do not contain sufficient information to answer the question. When true, "answer" should briefly state what is missing.
-
-REQUIRED JSON SCHEMA:
-{{
-  "hop": <integer>,
-  "question": "<string>",
-  "answer": "<string, ≤ 2 sentences>",
-  "confidence": <float 0.0–1.0>,
-  "supported_by": ["<evidence_id>", ...],
-  "answer_unknown": <true | false>
-}}
-"""
+from modules.prompt_template import _HOP_SYSTEM_PROMPT
 
 
 def _format_passages(passages: list[dict]) -> str:
@@ -48,7 +23,9 @@ def _format_passages(passages: list[dict]) -> str:
         return "No passages available."
     lines = []
     for p in passages:
-        lines.append(f"[{p['evidence_id']}] ({p['source_url']}, {p['source_date']}): {p['passage_text']}")
+        lines.append(
+            f"[{p['evidence_id']}] ({p['source_url']}, {p['source_date']}): {p['passage_text']}"
+        )
     return "\n".join(lines)
 
 
@@ -60,7 +37,7 @@ def _build_hop_prompt(
     prior_text = ""
     if sq.get("depends_on_hops") and prior_answers:
         lines = [
-            f"Previous answer (hop {hop}): \"{ans}\""
+            f'Previous answer (hop {hop}): "{ans}"'
             for hop, ans in prior_answers.items()
             if hop in sq["depends_on_hops"]
         ]
@@ -74,7 +51,7 @@ def _build_hop_prompt(
     )
     return [
         {"role": "system", "content": _HOP_SYSTEM_PROMPT},
-        {"role": "user",   "content": user_content},
+        {"role": "user", "content": user_content},
     ]
 
 
@@ -84,6 +61,7 @@ def _build_hop_prompt(
 # ---------------------------------------------------------------------------
 # Single-hop execution
 # ---------------------------------------------------------------------------
+
 
 def run_single_hop(
     sq: dict,
@@ -114,13 +92,23 @@ def run_single_hop(
             if not result["answer_unknown"] or attempt == max_retries:
                 return result
 
-            logger.debug("Hop %d attempt %d: answer_unknown=True, retrying.", sq["hop"], attempt + 1)
+            logger.debug(
+                "Hop %d attempt %d: answer_unknown=True, retrying.",
+                sq["hop"],
+                attempt + 1,
+            )
 
         except Exception as exc:
-            logger.warning("Hop %d attempt %d parse error: %s", sq["hop"], attempt + 1, exc)
+            logger.warning(
+                "Hop %d attempt %d parse error: %s", sq["hop"], attempt + 1, exc
+            )
 
     # Complete failure
-    logger.error("Hop %d failed after %d attempts — marking answer_unknown.", sq["hop"], max_retries + 1)
+    logger.error(
+        "Hop %d failed after %d attempts — marking answer_unknown.",
+        sq["hop"],
+        max_retries + 1,
+    )
     return {
         "claim_id": claim_id,
         "hop": sq["hop"],
@@ -135,6 +123,7 @@ def run_single_hop(
 # ---------------------------------------------------------------------------
 # Multi-hop orchestration
 # ---------------------------------------------------------------------------
+
 
 def run_multihop(
     claim: dict,
@@ -151,7 +140,8 @@ def run_multihop(
         if any(dep in unknown_hops for dep in sq.get("depends_on_hops", [])):
             logger.warning(
                 "Skipping hop %d — depends on unknown hop(s) %s.",
-                sq["hop"], sq.get("depends_on_hops", []),
+                sq["hop"],
+                sq.get("depends_on_hops", []),
             )
             hop_results.append(
                 {
@@ -190,7 +180,11 @@ def run_multihop(
                             existing_hops.append(hop_id)
             relevant = retrieved
 
-        prior = {h["hop"]: h["answer"] for h in hop_results if h["hop"] in sq.get("depends_on_hops", [])}
+        prior = {
+            h["hop"]: h["answer"]
+            for h in hop_results
+            if h["hop"] in sq.get("depends_on_hops", [])
+        }
 
         result = run_single_hop(sq, prior, relevant, llm, claim_id=claim["claim_id"])
         hop_results.append(result)

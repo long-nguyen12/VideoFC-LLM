@@ -16,15 +16,7 @@ THRESHOLDS: dict[str, float] = {
     "nli_conflict_floor": 0.40,
 }
 
-_EVIDENCE_SCORE_SYSTEM_PROMPT = """\
-You are an evidence relevance scorer for fact-checking.
-Given one question and one evidence passage, score how strongly the passage supports answering the question.
-
-Return ONLY valid JSON:
-{
-  "score": <float in [0.0, 1.0]>
-}
-"""
+from modules.prompt_template import _EVIDENCE_SCORE_SYSTEM_PROMPT
 
 
 def _clamp_01(value: object) -> float:
@@ -86,12 +78,15 @@ def score_evidence(
             for e in relevant
         ]
         hop_scores[sq["hop"]] = max(per_passage_scores) if per_passage_scores else 0.0
-        logger.debug("Hop %d: best evidence score=%.3f", sq["hop"], hop_scores[sq["hop"]])
+        logger.debug(
+            "Hop %d: best evidence score=%.3f", sq["hop"], hop_scores[sq["hop"]]
+        )
 
     n = len(hop_scores)
     if n == 0:
         logger.warning(
-            "No hops found in claim %s - returning zero-score report.", claim["claim_id"]
+            "No hops found in claim %s - returning zero-score report.",
+            claim["claim_id"],
         )
         return {
             "claim_id": claim["claim_id"],
@@ -102,9 +97,9 @@ def score_evidence(
             "weak_aspects": [sq["question"] for sq in claim["sub_questions"]],
         }
 
-    coverage = sum(
-        1 for s in hop_scores.values() if s > thresholds["min_hop_confidence"]
-    ) / n
+    coverage = (
+        sum(1 for s in hop_scores.values() if s > thresholds["min_hop_confidence"]) / n
+    )
     confidence = sum(hop_scores.values()) / n
     consistency = min(
         modal_report.get("vc_score", 0.0),
