@@ -142,7 +142,7 @@ def main():
     print("=" * 60)
     print(str(summary))
     print("=" * 60 + "\n")
-    
+    print(results)
     # Final dump updates the status to Completed
     full_output = {
         "summary": summary.to_dict(),
