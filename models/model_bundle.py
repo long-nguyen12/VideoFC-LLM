@@ -240,20 +240,27 @@ class GenerativeLLM:
                 ] += (
                     "\n\nCRITICAL: Output ONLY valid JSON. Start with { and end with }."
                 )
+            try:
+                raw = self.generate(
+                    current_prompt, max_new_tokens=max_new_tokens, temperature=current_temp
+                )
+                parsed = self.extract_json(raw)
 
-            raw = self.generate(
-                current_prompt, max_new_tokens=max_new_tokens, temperature=current_temp
-            )
-            parsed = self.extract_json(raw)
-
-            if parsed is not None:
-                return parsed
-            logger.warning(
-                "JSON extraction failed (attempt %d/%d). Raw: %s",
-                attempt + 1,
-                max_retries + 1,
-                raw,
-            )
+                if parsed is not None:
+                    return parsed
+                logger.warning(
+                    "JSON extraction failed (attempt %d/%d). Raw: %s",
+                    attempt + 1,
+                    max_retries + 1,
+                    raw,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "LLM generation or JSON extraction error (attempt %d/%d): %s",
+                    attempt + 1,
+                    max_retries + 1,
+                    exc,
+                )
 
         logger.error("Failed to extract valid JSON after %d attempts", max_retries + 1)
         return None
