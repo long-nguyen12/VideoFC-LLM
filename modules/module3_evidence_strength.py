@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 
 from models import GenerativeLLM
-from modules.utils import safe_json_parse as _safe_json_parse
+
 
 logger = logging.getLogger(__name__)
 
@@ -44,16 +44,10 @@ def _llm_passage_score(
         },
     ]
 
-    for _ in range(max_retries + 1):
-        try:
-            raw = llm.generate(prompt, max_new_tokens=96)
-            data = _safe_json_parse(raw)
-            if not isinstance(data, dict):
-                continue
-            return _clamp_01(data.get("score"))
-        except Exception:
-            continue
-    return 0.0
+    data = llm.generate_json(prompt, max_new_tokens=96, max_retries=max_retries)
+    if not isinstance(data, dict):
+        return 0.0
+    return _clamp_01(data.get("score"))
 
 
 def score_evidence(

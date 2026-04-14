@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 
 from models import GenerativeLLM
-from modules.utils import safe_json_parse as _safe_json_parse
+
 
 logger = logging.getLogger(__name__)
 
@@ -47,14 +47,11 @@ Return ONLY valid JSON:
                     ),
                 },
             ]
-            try:
-                data = _safe_json_parse(llm.generate(prompt, max_new_tokens=96))
-                if not isinstance(data, dict):
-                    score = 0.0
-                else:
-                    score = float(data.get("score", 0.0))
-            except Exception:
+            data = llm.generate_json(prompt, max_new_tokens=96, max_retries=1)
+            if not isinstance(data, dict):
                 score = 0.0
+            else:
+                score = float(data.get("score", 0.0))
             raw_scores[eid] = max(0.0, min(1.0, score))
 
         total = sum(raw_scores.values()) or 1.0
@@ -145,21 +142,12 @@ def generate_hop_summaries(
             )
             continue
 
-        try:
-            prompt = _build_summary_prompt(hop)
-            raw = llm.generate(prompt, max_new_tokens=128)
-            data = _safe_json_parse(raw)
-            if not isinstance(data, dict):
-                summaries.append(hop["answer"])
-            else:
-                summaries.append(data.get("summary", hop["answer"]))
-        except Exception as exc:
-            logger.warning(
-                "Hop %d summary generation failed: %s - using answer as fallback.",
-                hop["hop"],
-                exc,
-            )
+        prompt = _build_summary_prompt(hop)
+        data = llm.generate_json(prompt, max_new_tokens=128, max_retries=1)
+        if not isinstance(data, dict):
             summaries.append(hop["answer"])
+        else:
+            summaries.append(data.get("summary", hop["answer"]))
 
     return summaries
 

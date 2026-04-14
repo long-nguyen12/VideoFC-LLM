@@ -1,11 +1,8 @@
 from __future__ import annotations
 
-import json
 import logging
-import re
 
 from models import GenerativeLLM
-from modules.utils import safe_json_parse as _safe_json_parse
 
 logger = logging.getLogger(__name__)
 
@@ -62,8 +59,6 @@ def _build_aggregator_prompt(
         {"role": "user", "content": user_content},
     ]
 
-
-# JSON parsing — shared implementation lives in modules/utils.py
 
 
 # ---------------------------------------------------------------------------
@@ -125,59 +120,47 @@ def aggregate_verdict(
         strength_report,
     )
 
-    last_exc = None
-    for attempt in range(max_retries + 1):
-        try:
-            raw = llm.generate(prompt, max_new_tokens=512)
-            data = _safe_json_parse(raw)
+    data = llm.generate_json(prompt, max_new_tokens=512, max_retries=max_retries)
 
-            reasoning_trace = [
+    if data is None:
+        logger.error("All aggregator attempts failed. Using fallback verdict.")
+        return {
+            "claim_id": claim["claim_id"],
+            "segment_id": segment["segment_id"],
+            "verdict": "insufficient_evidence",
+            "confidence": 0.0,
+            "reasoning_trace": [
                 {
-                    "step": rs["step"],
-                    "finding": rs["finding"],
-                    "source_hop": rs.get("source_hop"),
-                    "evidence_ids": rs.get("evidence_ids", []),
+                    "step": 1,
+                    "finding": "Aggregator LLM failed to produce a valid verdict.",
+                    "source_hop": None,
+                    "evidence_ids": [],
                 }
-                for rs in data.get("reasoning_trace", [])
-            ]
+            ],
+            "modal_conflict_used": modal_report["conflict_flag"],
+            "counterfactual": "",
+            "retrieval_rounds": retrieval_rounds,
+            "gate_passed": strength_report["gate_pass"],
+        }
 
-            return {
-                "claim_id": data.get("claim_id", claim["claim_id"]),
-                "segment_id": segment["segment_id"],
-                "verdict": data.get("verdict", "insufficient_evidence"),
-                "confidence": float(data.get("confidence", 0.0)),
-                "reasoning_trace": reasoning_trace,
-                "modal_conflict_used": bool(data.get("modal_conflict_used", False)),
-                "counterfactual": data.get("counterfactual", ""),
-                "retrieval_rounds": retrieval_rounds,
-                "gate_passed": strength_report["gate_pass"],
-            }
+    reasoning_trace = [
+        {
+            "step": rs["step"],
+            "finding": rs["finding"],
+            "source_hop": rs.get("source_hop"),
+            "evidence_ids": rs.get("evidence_ids", []),
+        }
+        for rs in data.get("reasoning_trace", [])
+    ]
 
-        except Exception as exc:
-            last_exc = exc
-            logger.warning(
-                "Aggregator attempt %d/%d failed: %s", attempt + 1, max_retries + 1, exc
-            )
-
-    # Fallback on complete failure
-    logger.error(
-        "All aggregator attempts failed (%s). Using fallback verdict.", last_exc
-    )
     return {
-        "claim_id": claim["claim_id"],
+        "claim_id": data.get("claim_id", claim["claim_id"]),
         "segment_id": segment["segment_id"],
-        "verdict": "insufficient_evidence",
-        "confidence": 0.0,
-        "reasoning_trace": [
-            {
-                "step": 1,
-                "finding": f"Aggregator LLM failed to produce a valid verdict: {last_exc}",
-                "source_hop": None,
-                "evidence_ids": [],
-            }
-        ],
-        "modal_conflict_used": modal_report["conflict_flag"],
-        "counterfactual": "",
+        "verdict": data.get("verdict", "insufficient_evidence"),
+        "confidence": float(data.get("confidence", 0.0)),
+        "reasoning_trace": reasoning_trace,
+        "modal_conflict_used": bool(data.get("modal_conflict_used", False)),
+        "counterfactual": data.get("counterfactual", ""),
         "retrieval_rounds": retrieval_rounds,
         "gate_passed": strength_report["gate_pass"],
     }

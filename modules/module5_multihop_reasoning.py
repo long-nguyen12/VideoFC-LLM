@@ -1,12 +1,9 @@
 from __future__ import annotations
 
-import json
 import logging
-import re
 
 from models import GenerativeLLM
 from modules.module4_targeted_retrieval import DenseRetriever, build_retrieval_query
-from modules.utils import safe_json_parse as _safe_json_parse
 
 logger = logging.getLogger(__name__)
 
@@ -54,8 +51,6 @@ def _build_hop_prompt(
     ]
 
 
-# JSON parsing — shared implementation lives in modules/utils.py
-
 
 # ---------------------------------------------------------------------------
 # Single-hop execution
@@ -73,34 +68,35 @@ def run_single_hop(
     prompt = _build_hop_prompt(sq, prior_answers, passages)
 
     for attempt in range(max_retries + 1):
-        try:
-            raw = llm.generate(prompt, max_new_tokens=256)
-            data = _safe_json_parse(raw)
+        data = llm.generate_json(prompt, max_new_tokens=256, max_retries=0)
 
-            result = {
-                "claim_id": claim_id,
-                "hop": data.get("hop", sq["hop"]),
-                "question": data.get("question", sq["question"]),
-                "answer": data.get("answer", ""),
-                "confidence": float(data.get("confidence", 0.0)),
-                "answer_unknown": bool(data.get("answer_unknown", False)),
-                "supported_by": data.get("supported_by", []),
-            }
-
-            # Accept on first non-unknown result, or on final attempt
-            if not result["answer_unknown"] or attempt == max_retries:
-                return result
-
-            logger.debug(
-                "Hop %d attempt %d: answer_unknown=True, retrying.",
+        if data is None:
+            logger.warning(
+                "Hop %d attempt %d: generate_json returned None.",
                 sq["hop"],
                 attempt + 1,
             )
+            continue
 
-        except Exception as exc:
-            logger.warning(
-                "Hop %d attempt %d parse error: %s", sq["hop"], attempt + 1, exc
-            )
+        result = {
+            "claim_id": claim_id,
+            "hop": data.get("hop", sq["hop"]),
+            "question": data.get("question", sq["question"]),
+            "answer": data.get("answer", ""),
+            "confidence": float(data.get("confidence", 0.0)),
+            "answer_unknown": bool(data.get("answer_unknown", False)),
+            "supported_by": data.get("supported_by", []),
+        }
+
+        # Accept on first non-unknown result, or on final attempt
+        if not result["answer_unknown"] or attempt == max_retries:
+            return result
+
+        logger.debug(
+            "Hop %d attempt %d: answer_unknown=True, retrying.",
+            sq["hop"],
+            attempt + 1,
+        )
 
     # Complete failure
     logger.error(
