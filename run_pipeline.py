@@ -18,11 +18,6 @@ from dataset import (
 logger = logging.getLogger(__name__)
 
 
-# ---------------------------------------------------------------------------
-# Dataset-aware pipeline
-# ---------------------------------------------------------------------------
-
-
 def run_fc_pipeline(
     inputs: dict,
     models: dict,
@@ -38,14 +33,11 @@ def run_fc_pipeline(
     )
 
     logger.info(
-        "=== Dataset pipeline start | claim_id=%s segment=%s ===",
+        "=== Pipeline start | claim_id=%s segment=%s ===",
         claim_id,
         segment["segment_id"],
     )
 
-    # ------------------------------------------------------------------
-    # Step 1 — Visual captioning (or synthetic bypass)
-    # ------------------------------------------------------------------
     logger.info("[1/7] Visual captioning")
     if segment.get("keyframes", []):
         visual_caption = models["caption_fn"](segment["keyframes"])
@@ -54,9 +46,6 @@ def run_fc_pipeline(
         visual_caption = inputs["visual_caption"]
         logger.debug("Synthetic caption (no keyframes): %s", visual_caption)
 
-    # ------------------------------------------------------------------
-    # Step 2 — Cross-modal consistency
-    # ------------------------------------------------------------------
     logger.info("[2/7] Cross-modal consistency")
     modal_report = compute_modal_consistency_llm(
         claim_text=claim_text,
@@ -68,9 +57,6 @@ def run_fc_pipeline(
     )
     print(f"DEBUG: Modal report for claim_id={claim_id} = {modal_report}")
 
-    # ------------------------------------------------------------------
-    # Step 3 — Claim decomposition (with optional rationale hint)
-    # ------------------------------------------------------------------
     logger.info("[3/7] Claim decomposition")
     rationale_hint = ""
     if use_rationale_hints:
@@ -94,16 +80,12 @@ def run_fc_pipeline(
     )
     logger.info("Decomposed into %d sub-questions.", len(claim["sub_questions"]))
 
-    # ------------------------------------------------------------------
-    # Step 4 — Gated evidence retrieval
-    # ------------------------------------------------------------------
     logger.info("[4/7] Gated evidence retrieval")
     evidence, strength_report = gated_retrieval_loop(
         claim=claim,
         segment=segment,
         evidence=list(inputs["initial_evidence"]),
         modal_report=modal_report,
-        retriever=retriever,
         llm=models["hop_llm"],
     )
     retrieval_rounds = 0 if strength_report["gate_pass"] else MAX_RETRIEVAL_ROUNDS
@@ -115,9 +97,6 @@ def run_fc_pipeline(
         strength_report["consistency_score"],
     )
 
-    # ------------------------------------------------------------------
-    # Step 5 — Multi-hop reasoning
-    # ------------------------------------------------------------------
     logger.info("[5/7] Multi-hop reasoning")
     hop_results = run_multihop(
         claim=claim,
@@ -129,9 +108,6 @@ def run_fc_pipeline(
     known = sum(1 for h in hop_results if not h["answer_unknown"])
     logger.info("Completed %d/%d hops.", known, len(hop_results))
 
-    # ------------------------------------------------------------------
-    # Step 6 — Verdict aggregation
-    # ------------------------------------------------------------------
     logger.info("[6/7] Verdict aggregation")
     verdict = aggregate_verdict(
         claim=claim,
@@ -147,9 +123,6 @@ def run_fc_pipeline(
         "Verdict: %s (confidence=%.2f)", verdict["verdict"], verdict["confidence"]
     )
 
-    # ------------------------------------------------------------------
-    # Step 7 — Explainability
-    # ------------------------------------------------------------------
     logger.info("[7/7] Explainability report")
     report = build_explainability_report(
         verdict=verdict,
@@ -161,7 +134,7 @@ def run_fc_pipeline(
     )
 
     logger.info(
-        "=== Dataset pipeline complete | verdict=%s ===",
+        "=== Pipeline complete | verdict=%s ===",
         report.get("verdict", "unknown"),
     )
     return report
