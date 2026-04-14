@@ -87,7 +87,7 @@ python example_usage.py
 ```python
 from models import load_single_llm_bundle
 from modules import DenseRetriever
-from dataset import record_to_pipeline_inputs, run_dataset_pipeline
+from dataset import record_to_pipeline_inputs, run_fc_pipeline
 from dataset.dataset_loader import DatasetLoader
 
 models = load_single_llm_bundle(
@@ -100,7 +100,7 @@ retriever = DenseRetriever(models.encoder)
 retriever.index(initial_evidence)
 
 inputs = record_to_pipeline_inputs(record)
-report = run_dataset_pipeline(
+report = run_fc_pipeline(
     inputs=inputs,
     models=models,
     retriever=retriever,

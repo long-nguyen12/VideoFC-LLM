@@ -109,7 +109,6 @@ def main():
                 f"  -> Pred: {result['pred_verdict']:<22} Gold: {result['gold_verdict']:<22} {is_correct}"
             )
             
-            # Auto-save incrementally so results are never lost on crash
             partial_summary = compute_metrics(results)
             with open(out_path, "w", encoding="utf-8") as f:
                 json.dump({

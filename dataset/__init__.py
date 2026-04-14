@@ -34,7 +34,7 @@ from .true_dataset_loader import (
     VERDICT_DISPLAY,
 )
 from run_pipeline import (
-    run_dataset_pipeline,
+    run_fc_pipeline,
     run_dataset_record,
 )
 from .evaluation import compute_metrics, EvaluationSummary, log_summary
@@ -47,7 +47,7 @@ __all__ = [
     "record_to_evidence",
     "record_to_rationale_context",
     "record_to_visual_caption",
-    "run_dataset_pipeline",
+    "run_fc_pipeline",
     "run_dataset_record",
     "compute_metrics",
     "EvaluationSummary",

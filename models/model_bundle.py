@@ -440,4 +440,5 @@ def load_single_llm_bundle(
         decomposer_llm=shared_llm,   # ─┐
         hop_llm=shared_llm,          #  ├─ same object, weights loaded once
         aggregator_llm=shared_llm,   # ─┘
+        consistency_llm=shared_llm,
     )

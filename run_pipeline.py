@@ -30,7 +30,10 @@ import logging
 
 from models.model_bundle import ModelBundle
 from modules.module1_claim_decomposer import decompose_claim
-from modules.module2_cross_modal_consistency import compute_modal_consistency
+from modules.module2_cross_modal_consistency import (
+    compute_modal_consistency,
+    compute_modal_consistency_llm,
+)
 from modules.module3_evidence_strength import score_evidence
 from modules.module4_targeted_retrieval import DenseRetriever, gated_retrieval_loop
 from modules.module5_multihop_reasoning import run_multihop
@@ -50,7 +53,8 @@ logger = logging.getLogger(__name__)
 # Dataset-aware pipeline
 # ---------------------------------------------------------------------------
 
-def run_dataset_pipeline(
+
+def run_fc_pipeline(
     inputs: dict,
     models: ModelBundle,
     retriever: DenseRetriever,
@@ -83,36 +87,36 @@ def run_dataset_pipeline(
     segment = inputs["segment"]
     claim_text = inputs["claim_text"]
     claim_id = inputs["claim_id"]
+    content = inputs["content"]
 
     logger.info(
         "=== Dataset pipeline start | claim_id=%s segment=%s ===",
-        claim_id, segment["segment_id"],
+        claim_id,
+        segment["segment_id"],
     )
 
     # ------------------------------------------------------------------
     # Step 1 — Visual captioning (or synthetic bypass)
     # ------------------------------------------------------------------
     logger.info("[1/7] Visual captioning")
-    print(segment.get("keyframes", []))
     if segment.get("keyframes", []):
         visual_caption = models.caption_fn(segment["keyframes"])
         logger.debug("VLM caption: %s", visual_caption[:120])
-        print(visual_caption)
     else:
         visual_caption = inputs["visual_caption"]
         logger.debug("Synthetic caption (no keyframes): %s", visual_caption[:120])
-        print(visual_caption)
 
     # ------------------------------------------------------------------
     # Step 2 — Cross-modal consistency
     # ------------------------------------------------------------------
     logger.info("[2/7] Cross-modal consistency")
-    modal_report = compute_modal_consistency(
+    modal_report = compute_modal_consistency_llm(
         claim_text=claim_text,
         visual_caption=visual_caption,
         transcript=segment["transcript"],
         segment_id=segment["segment_id"],
-        nli=models.nli,
+        content=content,
+        nli=models.consistency_llm,
     )
 
     # ------------------------------------------------------------------
@@ -123,8 +127,10 @@ def run_dataset_pipeline(
     if use_rationale_hints:
         ctx = inputs["rationale_context"]
         lines = [f"Known verdict: {ctx.get('snopes_rating', '')}"]
-        if ctx.get('main_rationale'): lines.append(f"Main rationale: {ctx['main_rationale']}")
-        for i, r in enumerate(ctx.get('additional_rationales', []), 1): lines.append(f"Supporting rationale {i}: {r}")
+        if ctx.get("main_rationale"):
+            lines.append(f"Main rationale: {ctx['main_rationale']}")
+        for i, r in enumerate(ctx.get("additional_rationales", []), 1):
+            lines.append(f"Supporting rationale {i}: {r}")
         rationale_hint = "\n".join(lines)[:600]
 
     claim = decompose_claim(
@@ -188,7 +194,9 @@ def run_dataset_pipeline(
         retrieval_rounds=retrieval_rounds,
         llm=models.aggregator_llm,
     )
-    logger.info("Verdict: %s (confidence=%.2f)", verdict["verdict"], verdict["confidence"])
+    logger.info(
+        "Verdict: %s (confidence=%.2f)", verdict["verdict"], verdict["confidence"]
+    )
 
     # ------------------------------------------------------------------
     # Step 7 — Explainability
@@ -204,7 +212,10 @@ def run_dataset_pipeline(
         llm=models.hop_llm,
     )
 
-    logger.info("=== Dataset pipeline complete | verdict=%s ===", report.get("verdict", "unknown"))
+    logger.info(
+        "=== Dataset pipeline complete | verdict=%s ===",
+        report.get("verdict", "unknown"),
+    )
     return report
 
 
@@ -235,7 +246,7 @@ def run_dataset_record(
 
     retriever.index(list(inputs["initial_evidence"]))
 
-    report = run_dataset_pipeline(
+    report = run_fc_pipeline(
         inputs=inputs,
         models=models,
         retriever=retriever,
