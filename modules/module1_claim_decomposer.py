@@ -55,7 +55,11 @@ def _build_user_message(
     claim_id: str,
     rationale_hint: str = "",
 ) -> str:
-    hint_block = f'\nKnown rationale context (use to guide decomposition):\n"{rationale_hint}"\n' if rationale_hint else ""
+    hint_block = (
+        f'\nKnown rationale context (use to guide decomposition):\n"{rationale_hint}"\n'
+        if rationale_hint
+        else ""
+    )
     return (
         f'Claim ID: "{claim_id}"\n'
         f'Claim: "{claim_text}"\n'
@@ -84,8 +88,13 @@ def _build_prompt(
         {
             "role": "user",
             "content": _build_user_message(
-                claim_text, visual_caption, transcript_excerpt,
-                start_ts, end_ts, conflict_flag, claim_id,
+                claim_text,
+                visual_caption,
+                transcript_excerpt,
+                start_ts,
+                end_ts,
+                conflict_flag,
+                claim_id,
                 rationale_hint=rationale_hint,
             ),
         },
@@ -98,6 +107,7 @@ def _build_prompt(
 # Public API
 # ---------------------------------------------------------------------------
 
+
 def decompose_claim(
     claim_text: str,
     claim_id: str,
@@ -109,63 +119,119 @@ def decompose_claim(
     rationale_hint: str = "",
     max_sub_questions: int = 5,
 ) -> dict:
+    def _esc(s: str) -> str:
+        return s.replace('"', '\\"').replace("\\", "\\\\") if s else ""
+
     prompt = _build_prompt(
-        claim_text=claim_text,
-        visual_caption=visual_caption,
-        transcript_excerpt=segment["transcript"],
+        claim_text=_esc(claim_text),
+        visual_caption=_esc(visual_caption),
+        transcript_excerpt=_esc(segment["transcript"]),
         start_ts=segment["start_ts"],
         end_ts=segment["end_ts"],
         conflict_flag=conflict_flag,
-        claim_id=claim_id,
-        rationale_hint=rationale_hint,
+        claim_id=_esc(claim_id),
+        rationale_hint=_esc(rationale_hint),
         max_sub_questions=max_sub_questions,
     )
 
-    last_exc: Exception | None = None
-    for attempt in range(max_retries + 1):
-        try:
-            raw = llm.generate(prompt, max_new_tokens=512)
-            data = _safe_json_parse(raw)
-            print(f"LLM raw output (attempt {attempt + 1}): {raw}, parsed as {data}")
-            sub_questions = [
+    data = llm.generate_json(
+        prompt,
+        max_new_tokens=256,
+        temperature=0.0,
+        max_retries=max_retries,
+    )
+
+    if data is None:
+        logger.error(
+            "Claim decomposition failed after %d attempts. claim_id=%s segment_id=%s",
+            max_retries + 1,
+            claim_id,
+            segment.get("segment_id"),
+        )
+        return {
+            "claim_id": claim_id,
+            "claim_text": claim_text,
+            "segment_id": segment["segment_id"],
+            "sub_questions": [
                 {
-                    "hop": sq["hop"],
-                    "question": sq["question"],
-                    "depends_on_hops": sq.get("depends_on_hops", []),
-                    "evidence_type": sq.get("evidence_type", "any"),
+                    "hop": 1,
+                    "question": claim_text,
+                    "depends_on_hops": [],
+                    "evidence_type": "any",
                 }
-                for sq in data.get("sub_questions", [])
-            ]
+            ],
+        }
 
-            if not sub_questions:
-                raise ValueError("LLM returned zero sub-questions.")
+    is_valid, err_msg = _validate_decomposition_output(data, claim_id)
+    if not is_valid:
+        logger.warning(
+            "Decomposition output failed validation (claim_id=%s): %s. Raw keys: %s",
+            claim_id,
+            err_msg,
+            list(data.keys()) if isinstance(data, dict) else type(data),
+        )
+        return {
+            "claim_id": claim_id,
+            "claim_text": claim_text,
+            "segment_id": segment["segment_id"],
+            "sub_questions": [
+                {
+                    "hop": 1,
+                    "question": claim_text,
+                    "depends_on_hops": [],
+                    "evidence_type": "any",
+                }
+            ],
+        }
 
-            # Hard-cap: silently drop any excess sub-questions
-            sub_questions = sub_questions[:max_sub_questions]
+    sub_questions = [
+        {
+            "hop": sq["hop"],
+            "question": sq["question"],
+            "depends_on_hops": sq.get("depends_on_hops", []),
+            "evidence_type": sq.get("evidence_type", "any"),
+        }
+        for sq in data.get("sub_questions", [])
+        if isinstance(sq.get("hop"), int) and isinstance(sq.get("question"), str)
+    ][:max_sub_questions]
 
-            return {
-                "claim_id": data.get("claim_id", claim_id),
-                "claim_text": claim_text,
-                "segment_id": segment["segment_id"],
-                "sub_questions": sub_questions,
-            }
-
-        except Exception as exc:
-            last_exc = exc
-            logger.warning("Claim decomposition attempt %d/%d failed: %s", attempt + 1, max_retries + 1, exc)
-
-    # Fallback: single sub-question covering the whole claim
-    logger.error("All decomposition attempts failed (%s). Using fallback single-hop.", last_exc)
-    return {
-        "claim_id": claim_id,
-        "claim_text": claim_text,
-        "segment_id": segment["segment_id"],
-        "sub_questions": [
+    if not sub_questions:
+        logger.warning(
+            "No valid sub-questions extracted; using fallback. claim_id=%s", claim_id
+        )
+        sub_questions = [
             {
                 "hop": 1,
                 "question": claim_text,
                 "depends_on_hops": [],
                 "evidence_type": "any",
             }
-        ],
+        ]
+
+    return {
+        "claim_id": data.get("claim_id", claim_id),
+        "claim_text": claim_text,
+        "segment_id": segment["segment_id"],
+        "sub_questions": sub_questions,
     }
+
+
+def _validate_decomposition_output(data: dict, claim_id: str) -> tuple[bool, str]:
+    if not isinstance(data, dict):
+        return False, "Output is not a JSON object"
+    if "sub_questions" not in data:
+        return False, "Missing 'sub_questions' field"
+    if not isinstance(data["sub_questions"], list):
+        return False, "'sub_questions' must be a list"
+
+    for i, sq in enumerate(data["sub_questions"]):
+        if not isinstance(sq.get("hop"), int) or sq["hop"] < 1:
+            return False, f"sub_questions[{i}]: 'hop' must be integer >= 1"
+        if not isinstance(sq.get("question"), str) or not sq["question"].strip():
+            return False, f"sub_questions[{i}]: 'question' must be non-empty string"
+        if sq.get("evidence_type") not in ("video", "web", "kb", "any"):
+            return False, f"sub_questions[{i}]: invalid 'evidence_type'"
+        if not isinstance(sq.get("depends_on_hops", []), list):
+            return False, f"sub_questions[{i}]: 'depends_on_hops' must be a list"
+
+    return True, ""
