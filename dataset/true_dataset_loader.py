@@ -512,7 +512,7 @@ def load_for_pipeline(
 def run_pipeline_evaluation(
     path: str = DATA_PATH,
     split: str = "test",
-    models: "ModelBundle" = None,  # type: ignore[assignment]
+    models: dict = None,  # type: ignore[assignment]
     retriever: "DenseRetriever" = None,  # type: ignore[assignment]
     use_rationale_hints: bool = False,
     seed: int = 42,
@@ -531,7 +531,7 @@ def run_pipeline_evaluation(
     ----------
     path                : Root path to the TRUE dataset.
     split               : ``"train"``, ``"val"``, ``"test"``, or ``"train_val"``.
-    models              : Loaded ``ModelBundle`` (from ``models.model_bundle``).
+    models              : Loaded model dict (from ``models.model_bundle``).
     retriever           : ``DenseRetriever`` pre-indexed on a passage corpus.
     use_rationale_hints : Inject gold rationale into Module 1.
                           Set ``False`` for blind evaluation.

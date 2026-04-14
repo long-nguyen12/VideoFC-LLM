@@ -28,7 +28,6 @@ from __future__ import annotations
 
 import logging
 
-from models.model_bundle import ModelBundle
 from modules.module1_claim_decomposer import decompose_claim
 from modules.module2_cross_modal_consistency import (
     compute_modal_consistency,
@@ -56,7 +55,7 @@ logger = logging.getLogger(__name__)
 
 def run_fc_pipeline(
     inputs: dict,
-    models: ModelBundle,
+    models: dict,
     retriever: DenseRetriever,
     use_rationale_hints: bool = True,
     max_sub_questions: int = 5,
@@ -73,7 +72,7 @@ def run_fc_pipeline(
     Parameters
     ----------
     inputs               : PipelineInputs from record_to_pipeline_inputs().
-    models               : Loaded ModelBundle.
+    models               : Loaded model dict.
     retriever            : DenseRetriever pre-indexed on a passage corpus.
     use_rationale_hints  : Whether to inject gold rationale into Module 1.
                            Set False for blind test-set evaluation.
@@ -87,7 +86,9 @@ def run_fc_pipeline(
     segment = inputs["segment"]
     claim_text = inputs["claim_text"]
     claim_id = inputs["claim_id"]
-    content = inputs["content"]
+    content = inputs.get("content") or inputs.get("rationale_context", {}).get(
+        "article_content", ""
+    )
 
     logger.info(
         "=== Dataset pipeline start | claim_id=%s segment=%s ===",
@@ -100,7 +101,7 @@ def run_fc_pipeline(
     # ------------------------------------------------------------------
     logger.info("[1/7] Visual captioning")
     if segment.get("keyframes", []):
-        visual_caption = models.caption_fn(segment["keyframes"])
+        visual_caption = models["caption_fn"](segment["keyframes"])
         logger.debug("VLM caption: %s", visual_caption[:120])
     else:
         visual_caption = inputs["visual_caption"]
@@ -116,7 +117,7 @@ def run_fc_pipeline(
         transcript=segment["transcript"],
         segment_id=segment["segment_id"],
         content=content,
-        nli=models.consistency_llm,
+        llm=models["consistency_llm"],
     )
 
     # ------------------------------------------------------------------
@@ -139,7 +140,7 @@ def run_fc_pipeline(
         segment=segment,
         visual_caption=visual_caption,
         conflict_flag=modal_report["conflict_flag"],
-        llm=models.decomposer_llm,
+        llm=models["decomposer_llm"],
         rationale_hint=rationale_hint,
         max_sub_questions=max_sub_questions,
     )
@@ -155,7 +156,7 @@ def run_fc_pipeline(
         evidence=list(inputs["initial_evidence"]),
         modal_report=modal_report,
         retriever=retriever,
-        nli=models.nli,
+        nli=models["nli"],
     )
     retrieval_rounds = 0 if strength_report["gate_pass"] else MAX_RETRIEVAL_ROUNDS
     logger.info(
@@ -174,7 +175,7 @@ def run_fc_pipeline(
         claim=claim,
         evidence=evidence,
         segment=segment,
-        llm=models.hop_llm,
+        llm=models["hop_llm"],
         retriever=retriever,
     )
     known = sum(1 for h in hop_results if not h["answer_unknown"])
@@ -192,7 +193,7 @@ def run_fc_pipeline(
         modal_report=modal_report,
         strength_report=strength_report,
         retrieval_rounds=retrieval_rounds,
-        llm=models.aggregator_llm,
+        llm=models["aggregator_llm"],
     )
     logger.info(
         "Verdict: %s (confidence=%.2f)", verdict["verdict"], verdict["confidence"]
@@ -208,8 +209,8 @@ def run_fc_pipeline(
         evidence=evidence,
         modal_report=modal_report,
         segment=segment,
-        nli=models.nli,
-        llm=models.hop_llm,
+        nli=models["nli"],
+        llm=models["hop_llm"],
     )
 
     logger.info(
@@ -221,7 +222,7 @@ def run_fc_pipeline(
 
 def run_dataset_record(
     record: dict,
-    models: ModelBundle,
+    models: dict,
     retriever: DenseRetriever,
     use_rationale_hints: bool = True,
     keyframe_paths: list[str] | None = None,
@@ -232,7 +233,7 @@ def run_dataset_record(
     Parameters
     ----------
     record               : Parsed DatasetRecord (now dict).
-    models               : Loaded ModelBundle.
+    models               : Loaded model dict.
     retriever            : DenseRetriever pre-indexed on a passage corpus.
     use_rationale_hints  : Whether to inject gold rationale hints (Module 1).
     keyframe_paths       : Optional extracted keyframe paths. If None, the

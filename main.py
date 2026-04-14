@@ -81,7 +81,7 @@ def main():
         else:
             bundle = load_default_bundle(load_in_4bit=args.load_in_4bit)
             
-        retriever = DenseRetriever(bundle.encoder)
+        retriever = DenseRetriever(bundle["encoder"])
         
     results = []
     

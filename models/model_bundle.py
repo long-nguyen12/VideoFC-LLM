@@ -19,7 +19,6 @@ from __future__ import annotations
 import base64
 import io
 import logging
-from dataclasses import dataclass, field
 from typing import Optional
 
 import torch
@@ -318,28 +317,6 @@ class GenerativeLLM:
         return self.tokenizer.decode(generated, skip_special_tokens=True).strip()
 
 
-# ---------------------------------------------------------------------------
-# Model Bundle
-# ---------------------------------------------------------------------------
-
-@dataclass
-class ModelBundle:
-    """
-    Container for all models used by the pipeline.
-    Pass this into run_pipeline() as a single argument.
-    """
-    captioner: VisualCaptioner
-    nli: NLIScorer
-    encoder: TextEncoder
-    decomposer_llm: GenerativeLLM
-    hop_llm: GenerativeLLM
-    aggregator_llm: GenerativeLLM
-
-    # Convenience wrapper so pipeline code can call models.caption_fn(keyframes)
-    def caption_fn(self, keyframes: list[str]) -> str:
-        return self.captioner.caption(keyframes)
-
-
 def load_default_bundle(
     captioner_model: str = "Qwen/Qwen2-VL-2B-Instruct",
     nli_model: str = "cross-encoder/nli-deberta-v3-small",
@@ -348,21 +325,34 @@ def load_default_bundle(
     hop_model: str = "Qwen/Qwen2.5-3B-Instruct",
     aggregator_model: str = "mistralai/Mistral-7B-Instruct-v0.3",
     load_in_4bit: bool = False,
-) -> ModelBundle:
+) -> dict:
     """
     Full multi-model bundle. Loads a separate checkpoint for each pipeline
     role. Requires ~20 GB VRAM (or ~12 GB with load_in_4bit=True).
     Override any model name to swap in a different checkpoint.
     """
     device = _device()
-    return ModelBundle(
-        captioner=VisualCaptioner(captioner_model, device=device),
-        nli=NLIScorer(nli_model, device=device),
-        encoder=TextEncoder(encoder_model, device=device),
-        decomposer_llm=GenerativeLLM(decomposer_model, device=device, load_in_4bit=load_in_4bit),
-        hop_llm=GenerativeLLM(hop_model, device=device, load_in_4bit=load_in_4bit),
-        aggregator_llm=GenerativeLLM(aggregator_model, device=device, load_in_4bit=load_in_4bit),
+    captioner = VisualCaptioner(captioner_model, device=device)
+    nli = NLIScorer(nli_model, device=device)
+    encoder = TextEncoder(encoder_model, device=device)
+    decomposer_llm = GenerativeLLM(
+        decomposer_model, device=device, load_in_4bit=load_in_4bit
     )
+    hop_llm = GenerativeLLM(hop_model, device=device, load_in_4bit=load_in_4bit)
+    aggregator_llm = GenerativeLLM(
+        aggregator_model, device=device, load_in_4bit=load_in_4bit
+    )
+    consistency_llm = hop_llm
+    return {
+        "captioner": captioner,
+        "caption_fn": captioner.caption,
+        "nli": nli,
+        "encoder": encoder,
+        "decomposer_llm": decomposer_llm,
+        "hop_llm": hop_llm,
+        "aggregator_llm": aggregator_llm,
+        "consistency_llm": consistency_llm,
+    }
 
 
 def load_single_llm_bundle(
@@ -372,13 +362,13 @@ def load_single_llm_bundle(
     encoder_model: str = "BAAI/bge-small-en-v1.5",
     load_in_4bit: bool = False,
     context_window: int = 2048,
-) -> ModelBundle:
+) -> dict:
     """
     Hardware-constrained bundle: one small LLM shared across all three
     generative roles (decomposer, hop reader, aggregator).
 
     The single LLM is loaded once and the same Python object is assigned to
-    all three ModelBundle slots — no duplication of weights in memory.
+    all three LLM slots — no duplication of weights in memory.
 
     Recommended models by VRAM budget
     ----------------------------------
@@ -404,8 +394,8 @@ def load_single_llm_bundle(
 
     Returns
     -------
-    ModelBundle  where decomposer_llm, hop_llm, aggregator_llm all point to
-                 the same GenerativeLLM instance.
+    dict where decomposer_llm, hop_llm, aggregator_llm all point to
+    the same GenerativeLLM instance.
     """
     device = _device()
     logger.debug(
@@ -433,12 +423,15 @@ def load_single_llm_bundle(
                 return ""
         captioner = _NullCaptioner()  # type: ignore[assignment]
 
-    return ModelBundle(
-        captioner=captioner,
-        nli=NLIScorer(nli_model, device=device),
-        encoder=TextEncoder(encoder_model, device=device),
-        decomposer_llm=shared_llm,   # ─┐
-        hop_llm=shared_llm,          #  ├─ same object, weights loaded once
-        aggregator_llm=shared_llm,   # ─┘
-        consistency_llm=shared_llm,
-    )
+    return {
+        "captioner": captioner,
+        "caption_fn": captioner.caption,
+        "nli": NLIScorer(nli_model, device=device),
+        "encoder": TextEncoder(encoder_model, device=device),
+        "decomposer_llm": shared_llm,
+        "hop_llm": shared_llm,
+        "aggregator_llm": shared_llm,
+        "consistency_llm": shared_llm,
+    }
+
+

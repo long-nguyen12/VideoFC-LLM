@@ -14,7 +14,7 @@ Usage
     from modules import DenseRetriever
 
     models   = load_default_bundle()
-    retriever = DenseRetriever(models.encoder)
+    retriever = DenseRetriever(models["encoder"])
     retriever.index(my_passage_corpus)
 
     report = run_pipeline(
@@ -32,7 +32,6 @@ from __future__ import annotations
 
 import logging
 
-from models import ModelBundle
 from modules import (
     DenseRetriever,
     MAX_RETRIEVAL_ROUNDS,
@@ -52,7 +51,7 @@ def run_pipeline(
     claim_id: str,
     segment: dict,
     initial_evidence: list[dict],
-    models: ModelBundle,
+    models: dict,
     retriever: DenseRetriever,
 ) -> dict:
     """
@@ -64,7 +63,7 @@ def run_pipeline(
     claim_id          : Stable identifier for this claim.
     segment           : VideoSegment containing transcript and keyframe paths.
     initial_evidence  : Pre-given evidence passages from the dataset.
-    models            : ModelBundle with all loaded HuggingFace models.
+    models            : Dict with all loaded HuggingFace models.
     retriever         : DenseRetriever pre-indexed on a passage corpus.
 
     Returns
@@ -80,7 +79,7 @@ def run_pipeline(
     # Compute a single visual caption from keyframes.
     # ------------------------------------------------------------------
     logger.info("[1/7] Visual captioning")
-    visual_caption: str = models.caption_fn(segment["keyframes"])
+    visual_caption: str = models["caption_fn"](segment["keyframes"])
     print("DEBUG: Visual caption:\n", visual_caption)  # Debug print
     logger.debug("Visual caption: %s", visual_caption[:120])
 
@@ -94,7 +93,7 @@ def run_pipeline(
         visual_caption=visual_caption,
         transcript=segment["transcript"],
         segment_id=segment["segment_id"],
-        nli=models.nli,
+        nli=models["nli"],
     )
 
     # ------------------------------------------------------------------
@@ -108,7 +107,7 @@ def run_pipeline(
         segment=segment,
         visual_caption=visual_caption,
         conflict_flag=modal_report["conflict_flag"],
-        llm=models.decomposer_llm,
+        llm=models["decomposer_llm"],
     )
     logger.info("Decomposed into %d sub-questions.", len(claim["sub_questions"]))
 
@@ -123,7 +122,7 @@ def run_pipeline(
         evidence=list(initial_evidence),   # work on a copy
         modal_report=modal_report,
         retriever=retriever,
-        nli=models.nli,
+        nli=models["nli"],
     )
     retrieval_rounds = 0 if strength_report["gate_pass"] else MAX_RETRIEVAL_ROUNDS
     logger.info(
@@ -143,7 +142,7 @@ def run_pipeline(
         claim=claim,
         evidence=evidence,
         segment=segment,
-        llm=models.hop_llm,
+        llm=models["hop_llm"],
         retriever=retriever,
     )
     known = sum(1 for h in hop_results if not h["answer_unknown"])
@@ -162,7 +161,7 @@ def run_pipeline(
         modal_report=modal_report,
         strength_report=strength_report,
         retrieval_rounds=retrieval_rounds,
-        llm=models.aggregator_llm,
+        llm=models["aggregator_llm"],
     )
     logger.info("Verdict: %s (confidence=%.2f)", verdict["verdict"], verdict["confidence"])
 
@@ -177,8 +176,8 @@ def run_pipeline(
         evidence=evidence,
         modal_report=modal_report,
         segment=segment,
-        nli=models.nli,
-        llm=models.hop_llm,
+        nli=models["nli"],
+        llm=models["hop_llm"],
     )
 
     logger.info("=== Pipeline complete | verdict=%s ===", report.get("verdict", "unknown"))

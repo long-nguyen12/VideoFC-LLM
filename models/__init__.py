@@ -9,8 +9,8 @@ from .model_bundle import (
     NLIScorer,
     TextEncoder,
     GenerativeLLM,
-    ModelBundle,
     load_default_bundle,
+    load_single_llm_bundle,
 )
 
 __all__ = [
@@ -18,6 +18,6 @@ __all__ = [
     "NLIScorer",
     "TextEncoder",
     "GenerativeLLM",
-    "ModelBundle",
     "load_default_bundle",
+    "load_single_llm_bundle",
 ]
