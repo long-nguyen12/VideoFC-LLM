@@ -128,7 +128,7 @@ def decompose_claim(
 
     data = llm.generate_json(
         prompt,
-        max_new_tokens=512,
+        max_new_tokens=1024,
         temperature=0.0,
         max_retries=max_retries,
     )
