@@ -50,8 +50,8 @@ def _llm_retrieval_score(
         {
             "role": "user",
             "content": (
-                f'Query: "{query[:500]}"\n'
-                f'Passage: "{passage_text[:2000]}"\n'
+                f'Query: "{query}"\n'
+                f'Passage: "{passage_text}"\n'
                 "Output JSON only."
             ),
         },
@@ -133,7 +133,7 @@ def build_retrieval_query(
     query = weak_aspect
     if known_facts:
         query += f" Context: {known_facts}"
-    query += f" Video context: {segment.get('transcript', '')[:200]}"
+    query += f" Video context: {segment.get('transcript', '')}"
     return query
 
 

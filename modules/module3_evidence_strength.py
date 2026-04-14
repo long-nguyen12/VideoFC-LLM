@@ -46,8 +46,8 @@ def _llm_passage_score(
         {
             "role": "user",
             "content": (
-                f'Question: "{question[:500]}"\n'
-                f'Passage: "{passage_text[:2000]}"\n'
+                f'Question: "{question}"\n'
+                f'Passage: "{passage_text}"\n'
                 "Output JSON only."
             ),
         },

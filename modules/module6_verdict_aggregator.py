@@ -52,8 +52,8 @@ def _format_hop_answers(hop_results: list[dict], max_hops: int = 4) -> str:
     for h in hop_results[:max_hops]:
         status = "UNKNOWN" if h["answer_unknown"] else f"conf={h['confidence']:.2f}"
         # Truncate long answers to keep the prompt short for small models
-        answer = h["answer"][:120] + "…" if len(h["answer"]) > 120 else h["answer"]
-        lines.append(f'Hop {h["hop"]}: Q: "{h["question"][:80]}" → A: "{answer}" ({status})')
+        answer = h["answer"] + "…" if len(h["answer"]) > 120 else h["answer"]
+        lines.append(f'Hop {h["hop"]}: Q: "{h["question"]}" → A: "{answer}" ({status})')
     if len(hop_results) > max_hops:
         lines.append(f"… ({len(hop_results) - max_hops} more hops truncated)")
     return "\n".join(lines) if lines else "No hop answers available."
@@ -68,8 +68,8 @@ def _build_aggregator_prompt(
     strength_report: dict,
 ) -> list[dict[str, str]]:
     # Truncate free-text fields so the total prompt fits in a small context window
-    caption_short  = visual_caption[:120]
-    conflict_line  = (
+    caption_short = visual_caption
+    conflict_line = (
         f"conflict={modal_report['conflict_flag']}  dominant={modal_report['dominant_conflict']}  "
         f"vc={modal_report['vc_score']:.2f}  tc={modal_report['tc_score']:.2f}  vt={modal_report['vt_score']:.2f}"
     )
@@ -80,7 +80,7 @@ def _build_aggregator_prompt(
         f"cons={strength_report['consistency_score']:.2f}"
     )
     user_content = (
-        f'Claim: "{claim["claim_text"][:200]}"\n'
+        f'Claim: "{claim["claim_text"]}"\n'
         f'Claim ID: "{claim["claim_id"]}"\n'
         f'Visual: "{caption_short}"\n\n'
         f"Hops:\n{_format_hop_answers(hop_results)}\n\n"
@@ -90,7 +90,7 @@ def _build_aggregator_prompt(
     )
     return [
         {"role": "system", "content": _AGGREGATOR_SYSTEM_PROMPT},
-        {"role": "user",   "content": user_content},
+        {"role": "user", "content": user_content},
     ]
 
 
@@ -100,6 +100,7 @@ def _build_aggregator_prompt(
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def aggregate_verdict(
     claim: dict,
@@ -117,7 +118,8 @@ def aggregate_verdict(
         logger.warning(
             "Claim %s: gate_pass=False after %d retrieval rounds. "
             "Emitting insufficient_evidence verdict.",
-            claim["claim_id"], retrieval_rounds,
+            claim["claim_id"],
+            retrieval_rounds,
         )
         return {
             "claim_id": claim["claim_id"],
@@ -146,8 +148,12 @@ def aggregate_verdict(
         }
 
     prompt = _build_aggregator_prompt(
-        claim, segment, visual_caption,
-        hop_results, modal_report, strength_report,
+        claim,
+        segment,
+        visual_caption,
+        hop_results,
+        modal_report,
+        strength_report,
     )
 
     last_exc = None
@@ -185,7 +191,9 @@ def aggregate_verdict(
             )
 
     # Fallback on complete failure
-    logger.error("All aggregator attempts failed (%s). Using fallback verdict.", last_exc)
+    logger.error(
+        "All aggregator attempts failed (%s). Using fallback verdict.", last_exc
+    )
     return {
         "claim_id": claim["claim_id"],
         "segment_id": segment["segment_id"],

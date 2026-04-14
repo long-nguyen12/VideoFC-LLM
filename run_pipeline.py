@@ -80,7 +80,7 @@ def run_fc_pipeline(
             lines.append(f"Main rationale: {ctx['main_rationale']}")
         for i, r in enumerate(ctx.get("additional_rationales", []), 1):
             lines.append(f"Supporting rationale {i}: {r}")
-        rationale_hint = "\n".join(lines)[:600]
+        rationale_hint = "\n".join(lines)
 
     claim = decompose_claim(
         claim_text=claim_text,

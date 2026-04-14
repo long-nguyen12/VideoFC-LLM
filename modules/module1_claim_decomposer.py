@@ -58,9 +58,9 @@ def _build_user_message(
     hint_block = f'\nKnown rationale context (use to guide decomposition):\n"{rationale_hint}"\n' if rationale_hint else ""
     return (
         f'Claim ID: "{claim_id}"\n'
-        f'Claim: "{claim_text[:200]}"\n'
-        f'Visual: "{visual_caption[:120]}"\n'
-        f'Transcript: "{transcript_excerpt[:200]}"\n'
+        f'Claim: "{claim_text}"\n'
+        f'Visual: "{visual_caption}"\n'
+        f'Transcript: "{transcript_excerpt}"\n'
         f"Conflict flag: {conflict_flag}\n"
         f"{hint_block}\n"
         "Decompose this claim. Output ONLY valid JSON. Start your response with { and end with }."
@@ -112,7 +112,7 @@ def decompose_claim(
     prompt = _build_prompt(
         claim_text=claim_text,
         visual_caption=visual_caption,
-        transcript_excerpt=segment["transcript"][:300],
+        transcript_excerpt=segment["transcript"],
         start_ts=segment["start_ts"],
         end_ts=segment["end_ts"],
         conflict_flag=conflict_flag,

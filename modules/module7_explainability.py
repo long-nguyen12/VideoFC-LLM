@@ -42,7 +42,7 @@ Return ONLY valid JSON:
                     "role": "user",
                     "content": (
                         f'Verdict label: "{verdict_label}"\n'
-                        f'Passage: "{passage[:2000]}"\n'
+                        f'Passage: "{passage}"\n'
                         "Output JSON only."
                     ),
                 },
@@ -65,7 +65,7 @@ Return ONLY valid JSON:
             key_span = max(
                 sentences,
                 key=lambda s: len(set(s.lower().split()) & verdict_tokens),
-                default=sentences[0] if sentences else passage_text[:120],
+                default=sentences[0] if sentences else passage_text,
             )
             saliency_list.append(
                 {
