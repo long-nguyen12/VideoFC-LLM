@@ -322,7 +322,8 @@ class GenerativeLLM:
 
         try:
             return json.loads(no_fences[start:end])
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as exc:
+            logger.warning("Failed to parse JSON from extracted text: %s", exc)
             return None
 
 
