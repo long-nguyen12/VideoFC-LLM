@@ -102,10 +102,10 @@ def run_fc_pipeline(
     logger.info("[1/7] Visual captioning")
     if segment.get("keyframes", []):
         visual_caption = models["caption_fn"](segment["keyframes"])
-        logger.debug("VLM caption: %s", visual_caption[:120])
+        logger.debug("VLM caption: %s", visual_caption)
     else:
         visual_caption = inputs["visual_caption"]
-        logger.debug("Synthetic caption (no keyframes): %s", visual_caption[:120])
+        logger.debug("Synthetic caption (no keyframes): %s", visual_caption)
 
     # ------------------------------------------------------------------
     # Step 2 — Cross-modal consistency
@@ -119,6 +119,7 @@ def run_fc_pipeline(
         content=content,
         llm=models["consistency_llm"],
     )
+    print(f"DEBUG: Modal report for claim_id={claim_id} = {modal_report}")
 
     # ------------------------------------------------------------------
     # Step 3 — Claim decomposition (with optional rationale hint)
