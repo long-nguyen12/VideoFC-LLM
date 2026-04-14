@@ -153,8 +153,9 @@
 # ---------------------------------------------------------------------------
 # Qwen-Optimized System Prompts
 # ---------------------------------------------------------------------------
-
 _DECOMPOSITION_PROMPT_TEMPLATE = """\
+STRICT INSTRUCTION: Output ONLY the JSON object. Do NOT think step-by-step, do NOT explain, and do NOT output any text, markdown, or reasoning before or after the JSON. Start your response immediately with {{ and end with }}.
+
 You are a claim decomposer for a video fact-checking system.
 Given a composite claim and a video context summary, decompose the claim into an ordered list of atomic sub-questions. Each sub-question must be:
 - independently verifiable
@@ -184,6 +185,8 @@ REQUIRED JSON SCHEMA:
 """
 
 _CONSISTENCY_MODAL_SYSTEM_PROMPT = """\
+STRICT INSTRUCTION: Output ONLY the JSON object. Do NOT think step-by-step, do NOT explain, and do NOT output any text, markdown, or reasoning before or after the JSON. Start your response immediately with {{ and end with }}.
+
 You are a strict cross-modal consistency scorer for fact-checking.
 
 Compare the following input pairs and assign a consistency score in [0, 1] for each:
@@ -217,6 +220,8 @@ REQUIRED JSON SCHEMA:
 """
 
 _EVIDENCE_SCORE_SYSTEM_PROMPT = """\
+STRICT INSTRUCTION: Output ONLY the JSON object. Do NOT think step-by-step, do NOT explain, and do NOT output any text, markdown, or reasoning before or after the JSON. Start your response immediately with {{ and end with }}.
+
 You are an evidence relevance scorer for fact-checking.
 Given one question and one evidence passage, score how strongly the passage supports answering the question.
 
@@ -232,6 +237,8 @@ REQUIRED JSON SCHEMA:
 """
 
 _RETRIEVE_SCORE_SYSTEM_PROMPT = """\
+STRICT INSTRUCTION: Output ONLY the JSON object. Do NOT think step-by-step, do NOT explain, and do NOT output any text, markdown, or reasoning before or after the JSON. Start your response immediately with {{ and end with }}.
+
 You are a passage ranking model for fact-checking retrieval.
 Given one query and one passage, estimate relevance for answering the query.
 
@@ -247,6 +254,8 @@ REQUIRED JSON SCHEMA:
 """
 
 _HOP_SYSTEM_PROMPT = """\
+STRICT INSTRUCTION: Output ONLY the JSON object. Do NOT think step-by-step, do NOT explain, and do NOT output any text, markdown, or reasoning before or after the JSON. Start your response immediately with {{ and end with }}.
+
 You are a single-hop evidence reader for a video fact-checking system.
 You receive one atomic sub-question, optionally an answer from a previous hop, and a set of retrieved evidence passages.
 Produce a concise intermediate answer (≤ 2 sentences) with citations.
@@ -274,6 +283,8 @@ REQUIRED JSON SCHEMA:
 """
 
 _AGGREGATOR_SYSTEM_PROMPT = """\
+STRICT INSTRUCTION: Output ONLY the JSON object. Do NOT think step-by-step, do NOT explain, and do NOT output any text, markdown, or reasoning before or after the JSON. Start your response immediately with {{ and end with }}.
+
 You are a fact-checking verdict aggregator.
 Given a claim, hop answers, a cross-modal conflict report, and evidence gate status, produce a verdict.
 
@@ -307,6 +318,8 @@ REQUIRED JSON SCHEMA:
 """
 
 _SUMMARY_SYSTEM_PROMPT = """\
+STRICT INSTRUCTION: Output ONLY the JSON object. Do NOT think step-by-step, do NOT explain, and do NOT output any text, markdown, or reasoning before or after the JSON. Start your response immediately with {{ and end with }}.
+
 You are an explainability assistant for a video fact-checking system.
 Given one intermediate reasoning answer and its supporting evidence IDs, write exactly one plain-language sentence that a non-expert could read.
 
