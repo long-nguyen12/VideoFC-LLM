@@ -244,7 +244,7 @@ class GenerativeLLM:
             raw = self.generate(
                 current_prompt, max_new_tokens=max_new_tokens, temperature=current_temp
             )
-            parsed = _safe_json_parse(raw)
+            parsed = self.extract_json(raw)
 
             if parsed is not None:
                 return parsed
@@ -257,6 +257,66 @@ class GenerativeLLM:
 
         logger.error("Failed to extract valid JSON after %d attempts", max_retries + 1)
         return None
+
+    @staticmethod
+    def extract_json(text: str) -> Optional[dict]:
+        if not text or not isinstance(text, str):
+            return None
+
+        # Try 1: Raw parse (fast path for well-formed output)
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            pass
+
+        # Try 2: Strip whitespace only
+        try:
+            return json.loads(text.strip())
+        except json.JSONDecodeError:
+            pass
+
+        # Try 3: Remove markdown fences if present
+        no_fences = re.sub(
+            r"^```(?:json)?\s*|\s*```$", "", text.strip(), flags=re.MULTILINE
+        )
+        try:
+            return json.loads(no_fences)
+        except json.JSONDecodeError:
+            pass
+
+        # Try 4: Brace-matching extraction (handles trailing noise)
+        start = no_fences.find("{")
+        if start == -1:
+            return None
+
+        depth, end, in_str, escaped = 0, -1, False, False
+        for i, c in enumerate(no_fences[start:], start):
+            if escaped:
+                escaped = False
+                continue
+            if c == "\\" and in_str:
+                escaped = True
+                continue
+            if c == '"' and not escaped:
+                in_str = not in_str
+                continue
+            if in_str:
+                continue
+            if c == "{":
+                depth += 1
+            elif c == "}":
+                depth -= 1
+                if depth == 0:
+                    end = i + 1
+                    break
+
+        if end == -1:
+            return None
+
+        try:
+            return json.loads(no_fences[start:end])
+        except json.JSONDecodeError:
+            return None
 
 
 # ---------------------------------------------------------------------------
