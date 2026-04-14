@@ -242,7 +242,9 @@ class GenerativeLLM:
                 )
             try:
                 raw = self.generate(
-                    current_prompt, max_new_tokens=max_new_tokens, temperature=current_temp
+                    current_prompt,
+                    max_new_tokens=max_new_tokens,
+                    temperature=current_temp,
                 )
                 parsed = self.extract_json(raw)
 
@@ -267,44 +269,40 @@ class GenerativeLLM:
 
     @staticmethod
     def extract_json(text: str) -> Optional[dict]:
+        """Robust JSON extraction with newline escaping and brace-matching fallback."""
         if not text or not isinstance(text, str):
             return None
 
-        # Try 1: Raw parse (fast path for well-formed output)
-        try:
-            return json.loads(text)
-        except json.JSONDecodeError:
-            pass
+        # Pre-process: escape literal newlines inside string values
+        preprocessed = GenerativeLLM._escape_literal_newlines_in_json(text)
 
-        # Try 2: Strip whitespace only
+        # Strategy 1: Try parsing preprocessed text
         try:
-            return json.loads(text.strip())
-        except json.JSONDecodeError:
-            pass
+            return json.loads(preprocessed)
+        except json.JSONDecodeError as e:
+            logger.debug("Preprocessed parse failed at pos %d: %s", e.pos, e.msg)
+            # Log context for debugging
+            if e.pos < len(preprocessed):
+                ctx_start = max(0, e.pos - 40)
+                ctx_end = min(len(preprocessed), e.pos + 40)
+                logger.debug("Error context: %r", preprocessed[ctx_start:ctx_end])
 
-        # Try 3: Remove markdown fences if present
-        no_fences = re.sub(
-            r"^```(?:json)?\s*|\s*```$", "", text.strip(), flags=re.MULTILINE
-        )
-        try:
-            return json.loads(no_fences)
-        except json.JSONDecodeError:
-            pass
-
-        # Try 4: Brace-matching extraction (handles trailing noise)
-        start = no_fences.find("{")
+        # Strategy 2: Try original text with brace-matching extraction
+        cleaned = text.strip()
+        start = cleaned.find("{")
         if start == -1:
             return None
 
-        depth, end, in_str, escaped = 0, -1, False, False
-        for i, c in enumerate(no_fences[start:], start):
-            if escaped:
-                escaped = False
+        # Brace-matching to find complete JSON object
+        depth, end, in_str, esc = 0, -1, False, False
+        for i, c in enumerate(cleaned[start:], start):
+            if esc:
+                esc = False
                 continue
             if c == "\\" and in_str:
-                escaped = True
+                esc = True
                 continue
-            if c == '"' and not escaped:
+            if c == '"' and not esc:
                 in_str = not in_str
                 continue
             if in_str:
@@ -320,11 +318,49 @@ class GenerativeLLM:
         if end == -1:
             return None
 
+        candidate = cleaned[start:end]
+        candidate_escaped = GenerativeLLM._escape_literal_newlines_in_json(candidate)
+
         try:
-            return json.loads(no_fences[start:end])
-        except json.JSONDecodeError as exc:
-            logger.warning("Failed to parse JSON from extracted text: %s", exc)
+            return json.loads(candidate_escaped)
+        except json.JSONDecodeError as e:
+            logger.debug("Brace-matched parse failed: %s", e)
             return None
+
+    @staticmethod
+    def _escape_literal_newlines_in_json(text: str) -> str:
+        """Escape literal newlines/tabs inside JSON string values using a state machine."""
+        result = []
+        in_string = False
+        escaped = False
+
+        for char in text:
+            if escaped:
+                result.append(char)
+                escaped = False
+                continue
+            if char == "\\" and in_string:
+                result.append(char)
+                escaped = True
+                continue
+            if char == '"':
+                in_string = not in_string
+                result.append(char)
+                continue
+            # Escape control characters only when inside a string
+            if in_string:
+                if char == "\n":
+                    result.append("\\n")
+                elif char == "\r":
+                    result.append("\\r")
+                elif char == "\t":
+                    result.append("\\t")
+                else:
+                    result.append(char)
+            else:
+                result.append(char)
+
+        return "".join(result)
 
 
 # ---------------------------------------------------------------------------
