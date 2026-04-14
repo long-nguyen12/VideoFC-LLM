@@ -249,7 +249,7 @@ class GenerativeLLM:
             if parsed is not None:
                 return parsed
             logger.warning(
-                "JSON extraction failed (attempt %d/%d). Raw: %.150s",
+                "JSON extraction failed (attempt %d/%d). Raw: %s",
                 attempt + 1,
                 max_retries + 1,
                 raw,
@@ -302,7 +302,7 @@ def load_single_llm_bundle(
         llm_model,
         device=device,
         load_in_4bit=load_in_4bit,
-        max_new_tokens_cap=256,
+        max_new_tokens_cap=1024,
         context_window=context_window,
     )
     captioner = VisualCaptioner(captioner_model, device=device)
