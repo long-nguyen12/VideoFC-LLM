@@ -150,11 +150,11 @@ def main():
         "status": "Completed",
         "results": [
             {
-                "claim_id": r.claim_id,
-                "pred_verdict": r.pred_verdict,
-                "gold_verdict": r.gold_verdict,
-                "correct": r.correct,
-                "report": r.report.model_dump()
+                "claim_id": r["claim_id"],
+                "pred_verdict": r["pred_verdict"],
+                "gold_verdict": r["gold_verdict"],
+                "correct": r["correct"],
+                "report": r["report"]
             }
             for r in results
         ]
