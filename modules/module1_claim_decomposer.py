@@ -126,7 +126,7 @@ def decompose_claim(
         try:
             raw = llm.generate(prompt, max_new_tokens=512)
             data = _safe_json_parse(raw)
-
+            print(f"LLM raw output (attempt {attempt + 1}): {raw}, parsed as {data}")
             sub_questions = [
                 {
                     "hop": sq["hop"],
