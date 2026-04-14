@@ -1,20 +1,3 @@
-"""
-modules/module1_claim_decomposer.py
-------------------------------------
-Module 1 — Claim Decomposer
-
-Breaks a composite claim into an ordered list of atomic sub-questions using
-a small instruction-tuned LLM (Phi-3-mini or Mistral-7B).
-
-Each sub-question is:
-  - independently verifiable
-  - answerable from external evidence or the video content
-  - ordered so that earlier answers condition later questions
-
-Input  : claim_text, VideoSegment, visual_caption, conflict_flag, GenerativeLLM
-Output : ClaimDecomposition
-"""
-
 from __future__ import annotations
 
 import json
@@ -95,7 +78,6 @@ def _build_prompt(
     rationale_hint: str = "",
     max_sub_questions: int = 5,
 ) -> list[dict[str, str]]:
-    """Return a chat-template message list."""
     system_prompt = _SYSTEM_PROMPT_TEMPLATE.format(max_sub_questions=max_sub_questions)
     return [
         {"role": "system", "content": system_prompt},
@@ -127,29 +109,6 @@ def decompose_claim(
     rationale_hint: str = "",
     max_sub_questions: int = 5,
 ) -> dict:
-    """
-    Decompose a composite claim into atomic sub-questions.
-
-    Parameters
-    ----------
-    claim_text        : The full claim string to verify.
-    claim_id          : Stable identifier for this claim.
-    segment           : The associated VideoSegment (provides transcript + timestamps).
-    visual_caption    : Caption produced by the visual captioner for this segment.
-    conflict_flag     : Whether Module 2 detected a cross-modal conflict.
-    llm               : A loaded GenerativeLLM instance.
-    max_retries       : Number of generation retries on parse failure.
-    rationale_hint    : Optional gold-rationale summary injected into the prompt
-                        (from RationaleContext.prompt_summary()). Guides the LLM
-                        toward evidence-aligned sub-questions when available.
-    max_sub_questions : Hard cap on the number of sub-questions returned.
-                        Set to 3 when using a ≤2B model to keep multi-hop
-                        context within the model's reliable output length.
-
-    Returns
-    -------
-    dict
-    """
     prompt = _build_prompt(
         claim_text=claim_text,
         visual_caption=visual_caption,

@@ -1,29 +1,3 @@
-"""
-dataset/dataset_pipeline.py
-----------------------------
-Dataset-aware pipeline entry point.
-
-Wraps the core run_pipeline() with two dataset-specific adaptations:
-
-1. Synthetic visual caption bypass
-   The dataset does not supply keyframe images. When VideoSegment.keyframes
-   is empty, the VLM captioner is skipped and the pre-built synthetic caption
-   (headline + description from record_to_visual_caption) is used directly.
-   This avoids a 7B model call for text-only records.
-
-2. Rationale injection (optional, controlled by use_rationale_hints flag)
-   The gold rationale from original_rationales is summarised and injected into
-   Module 1 (claim decomposer) via the rationale_hint parameter. This guides
-   the sub-question decomposition toward the known evidence structure, which
-   improves hop alignment during training and supervised evaluation.
-   Set use_rationale_hints=False for blind / test-set evaluation.
-
-3. Evaluation helpers
-   run_dataset_record() returns both the ExplainabilityReport and a
-   plain dict that records the gold label, predicted label, and
-   whether the predicted verdict matches the gold verdict.
-"""
-
 from __future__ import annotations
 
 import logging
@@ -60,29 +34,6 @@ def run_fc_pipeline(
     use_rationale_hints: bool = True,
     max_sub_questions: int = 5,
 ) -> dict:
-    """
-    Execute the pipeline from a PipelineInputs object.
-
-    Key differences from run_pipeline():
-      - If inputs.segment.keyframes is empty, inputs.visual_caption is used
-        directly (no VLM call).
-      - If use_rationale_hints=True, the gold rationale summary is injected
-        into Module 1 via rationale_hint.
-
-    Parameters
-    ----------
-    inputs               : PipelineInputs from record_to_pipeline_inputs().
-    models               : Loaded model dict.
-    retriever            : DenseRetriever pre-indexed on a passage corpus.
-    use_rationale_hints  : Whether to inject gold rationale into Module 1.
-                           Set False for blind test-set evaluation.
-    max_sub_questions    : Cap on sub-questions from the decomposer.
-                           Use 3 when running with a ≤2B single-model bundle.
-
-    Returns
-    -------
-    dict
-    """
     segment = inputs["segment"]
     claim_text = inputs["claim_text"]
     claim_id = inputs["claim_id"]
@@ -228,22 +179,6 @@ def run_dataset_record(
     use_rationale_hints: bool = True,
     keyframe_paths: list[str] | None = None,
 ) -> dict:
-    """
-    Run the full pipeline on a single DatasetRecord and return an eval result.
-
-    Parameters
-    ----------
-    record               : Parsed DatasetRecord (now dict).
-    models               : Loaded model dict.
-    retriever            : DenseRetriever pre-indexed on a passage corpus.
-    use_rationale_hints  : Whether to inject gold rationale hints (Module 1).
-    keyframe_paths       : Optional extracted keyframe paths. If None, the
-                           synthetic caption is used.
-
-    Returns
-    -------
-    dict
-    """
     inputs = record_to_pipeline_inputs(record, keyframe_paths=keyframe_paths)
 
     retriever.index(list(inputs["initial_evidence"]))

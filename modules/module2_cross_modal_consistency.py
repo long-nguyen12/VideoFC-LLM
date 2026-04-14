@@ -1,13 +1,3 @@
-"""
-modules/module2_cross_modal_consistency.py
-------------------------------------------
-Module 2 - Cross-Modal Consistency.
-
-Two implementations are provided:
-1) NLI-based: compute_modal_consistency(...)
-2) LLM-only:  compute_modal_consistency_llm(...)
-"""
-
 from __future__ import annotations
 
 import logging
@@ -60,12 +50,12 @@ def _build_modal_llm_prompt(
 ) -> list[dict[str, str]]:
     content_block = ""
     if content.strip():
-        content_block = f'Article/content: "{content[:2000]}"\n\n'
+        content_block = f'Article/content: "{content}"\n\n'
 
     user_content = (
-        f'Claim: "{claim_text[:500]}"\n'
-        f'Visual caption: "{visual_caption[:1000]}"\n'
-        f'Transcript: "{transcript[:1500]}"\n\n'
+        f'Claim: "{claim_text}"\n'
+        f'Visual caption: "{visual_caption}"\n'
+        f'Transcript: "{transcript}"\n\n'
         f"{content_block}"
         "Output JSON only."
     )
@@ -83,9 +73,6 @@ def compute_modal_consistency(
     nli: NLIScorer,
     conflict_floor: float = NLI_CONFLICT_FLOOR,
 ) -> dict:
-    """
-    NLI-based cross-modal consistency report.
-    """
     logger.debug("Computing cross-modal consistency for segment %s", segment_id)
 
     vc = nli.entailment_score(visual_caption, claim_text)
@@ -122,12 +109,6 @@ def compute_modal_consistency_llm(
     conflict_floor: float = NLI_CONFLICT_FLOOR,
     max_retries: int = 2,
 ) -> dict:
-    """
-    LLM-only cross-modal consistency scorer.
-
-    Returns the same base schema as compute_modal_consistency(), plus:
-      - "ac_score" when content is provided (or null otherwise).
-    """
     prompt = _build_modal_llm_prompt(
         claim_text=claim_text,
         visual_caption=visual_caption,

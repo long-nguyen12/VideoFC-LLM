@@ -54,7 +54,6 @@ class ClassMetrics:
 
 @dataclass
 class EvaluationSummary:
-    """Aggregate evaluation summary over a full dataset split."""
     num_records: int
     num_correct: int
     accuracy: float
@@ -185,7 +184,6 @@ def compute_metrics(results: list[dict]) -> EvaluationSummary:
 
 
 def log_summary(summary: EvaluationSummary, prefix: str = "") -> None:
-    """Log an EvaluationSummary at INFO level."""
     tag = f"[{prefix}] " if prefix else ""
     logger.info("%sAccuracy=%.4f  Macro-F1=%.4f  (%d records)",
                 tag, summary.accuracy, summary.macro_f1, summary.num_records)

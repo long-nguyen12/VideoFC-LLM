@@ -1,25 +1,3 @@
-"""
-modules/module3_evidence_strength.py
--------------------------------------
-Module 3 — Evidence Strength Scorer
-
-Determines whether the current evidence pool is sufficient to support verdict
-generation, without requiring any human sufficiency labels.
-
-The gate is derived from three NLI-based metrics:
-  coverage_score   — fraction of hops that have at least one evidence passage
-                     with entailment score > min_hop_confidence
-  confidence_score — mean max-entailment score across all hops
-  consistency_score— min of vc_score, tc_score, vt_score from Module 2
-
-All three must meet their respective thresholds for gate_pass = True.
-Sub-questions that fall short are returned as weak_aspects, which are used
-by Module 4 (targeted retrieval) to scope follow-up queries.
-
-Input  : ClaimDecomposition, list[EvidenceRef], ModalConflictReport, NLIScorer
-Output : EvidenceStrengthReport
-"""
-
 from __future__ import annotations
 
 import logging
@@ -52,21 +30,6 @@ def score_evidence(
     nli: NLIScorer,
     thresholds: dict[str, float] = THRESHOLDS,
 ) -> dict:
-    """
-    Score the current evidence pool against all sub-questions.
-
-    Parameters
-    ----------
-    claim        : Decomposed claim from Module 1.
-    evidence     : Current evidence list (initial + any retrieved so far).
-    modal_report : Cross-modal consistency report from Module 2.
-    nli          : A loaded NLIScorer.
-    thresholds   : Override defaults for tuning.
-
-    Returns
-    -------
-    dict
-    """
     hop_scores: dict[int, float] = {}
 
     for sq in claim["sub_questions"]:

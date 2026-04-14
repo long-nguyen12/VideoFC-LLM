@@ -1,31 +1,3 @@
-"""
-dataset/true_dataset_loader.py
--------------------------------
-Unified PyTorch dataset pipeline for the TRUE dataset.
-
-Supports one workflow:
-
-  1. LLM pipeline evaluation — via load_for_pipeline() / run_pipeline_evaluation()
-
-
-Usage — LLM pipeline evaluation
----------------------------------
-    from dataset.true_dataset_loader import load_for_pipeline, run_pipeline_evaluation
-
-    # Option A: load records + keyframe paths, then run pipeline yourself
-    items = load_for_pipeline(path="data/TRUE_Dataset", split="test")
-    for record, kf_paths in items:
-        result = run_dataset_record(record, models, retriever, keyframe_paths=kf_paths)
-
-    # Option B: run the full evaluation loop in one call
-    results = run_pipeline_evaluation(
-        path="data/TRUE_Dataset",
-        split="test",
-        models=bundle,
-        retriever=retriever,
-    )
-"""
-
 from __future__ import annotations
 
 import logging
@@ -323,7 +295,6 @@ RATING_TO_FLAT_FINE: dict[str, int] = {
 
 
 def rating_to_binary(rating_str: str) -> int:
-    """Return 0 (TRUE) or 1 (FALSE) for a rating string."""
     r = rating_str.lower()
     if r in {"mostly true", "true", "correct attribution"}:
         return 0
@@ -339,7 +310,6 @@ def rating_to_binary(rating_str: str) -> int:
 
 
 def clean_data(text: Optional[str]) -> str:
-    """Strip HTML tags and leading/trailing whitespace."""
     if text is None or str(text) == "nan":
         return ""
     text = re.sub(r"(<p>|</p>|@)+", "", str(text))
@@ -352,12 +322,6 @@ def clean_data(text: Optional[str]) -> str:
 
 
 def resolve_video_path(claim_id: str, data_path: str = DATA_PATH) -> str:
-    """
-    Resolve the local path to the video file for *claim_id*.
-
-    Checks train_val_video/ first, then test_video/.
-    Falls back to the test_video path (may not exist) if not found.
-    """
     if not claim_id:
         return ""
     root = Path(data_path)
@@ -372,12 +336,6 @@ def resolve_video_path(claim_id: str, data_path: str = DATA_PATH) -> str:
 
 
 def resolve_keyframe_path(claim_id: str, data_path: str = DATA_PATH) -> list[str]:
-    """
-    Return a list of extracted keyframe paths (*.jpeg) for *claim_id*.
-
-    Checks train_val_output/ then test_output/.
-    Returns an empty list if no frames are found.
-    """
     if not claim_id:
         return []
     root = Path(data_path)

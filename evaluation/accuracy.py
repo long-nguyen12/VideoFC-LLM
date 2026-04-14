@@ -11,7 +11,6 @@ from prettytable import PrettyTable
 
 
 def map_rating_to_binary(rating):
-    """Maps the rating to binary True/False based on the given categories"""
     true_categories = ["True", "Mostly True", "Correct Attribution"]
     false_categories = ["False", "Miscaptioned", "Mixture", "Fake", "Mostly False"]
 

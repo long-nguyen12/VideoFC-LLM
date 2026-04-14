@@ -1,35 +1,3 @@
-"""
-modules/module7_explainability.py
-----------------------------------
-Module 7 — Explainability Module
-
-The single accountability point for all transparency outputs. Transforms
-internal pipeline objects into a structured ExplainabilityReport consumable
-by UIs, auditors, and evaluation scripts without access to intermediate state.
-
-Three computations happen here:
-
-1. Evidence saliency
-   For each hop's supporting passages, compute a normalised NLI entailment
-   score against the verdict label. The highest-overlap sentence is extracted
-   as the key span.
-
-2. Modal annotations
-   Each conflicting modality pair (V↔C, T↔C, V↔T) is rendered as a
-   timestamp-anchored, plain-language annotation.
-
-3. Hop summaries
-   The per-hop reader LLM (same model as Module 5, no extra cost) writes
-   one plain-language sentence per hop. Unknown hops get a canned fallback.
-
-The counterfactual, gate_passed, and retrieval_rounds are passed through
-from FinalVerdict unchanged.
-
-Input  : FinalVerdict, list[HopResult], list[EvidenceRef],
-         ModalConflictReport, VideoSegment, NLIScorer, GenerativeLLM
-Output : ExplainabilityReport
-"""
-
 from __future__ import annotations
 
 import json
@@ -55,11 +23,6 @@ def compute_evidence_saliency(
     verdict_label: str,
     nli: NLIScorer,
 ) -> list[dict]:
-    """
-    For each evidence passage cited in a hop, score its entailment against the
-    verdict label and normalise within the hop. Extract the most salient sentence
-    as the key span.
-    """
     evidence_map: dict[str, dict] = {e["evidence_id"]: e for e in evidence}
     saliency_list: list[dict] = []
 
@@ -116,10 +79,6 @@ def build_modal_annotations(
     segment: dict,
     conflict_floor: float = NLI_CONFLICT_FLOOR,
 ) -> list[dict]:
-    """
-    Convert the ModalConflictReport into a list of timestamped plain-language
-    annotations — one per conflicting pair.
-    """
     pair_scores: dict[str, float] = {
         "V↔C": modal_report["vc_score"],
         "T↔C": modal_report["tc_score"],
@@ -197,10 +156,6 @@ def generate_hop_summaries(
     hop_results: list[dict],
     llm: GenerativeLLM,
 ) -> list[str]:
-    """
-    Generate one plain-language sentence per hop.
-    Unknown hops receive a deterministic fallback (no LLM call).
-    """
     summaries: list[str] = []
 
     for hop in hop_results:
@@ -236,23 +191,6 @@ def build_explainability_report(
     nli: NLIScorer,
     llm: GenerativeLLM,
 ) -> dict:
-    """
-    Build the final ExplainabilityReport — the sole output of the pipeline.
-
-    Parameters
-    ----------
-    verdict      : FinalVerdict from Module 6.
-    hop_results  : All HopResults from Module 5.
-    evidence     : Full evidence pool (initial + retrieved).
-    modal_report : ModalConflictReport from Module 2.
-    segment      : Source VideoSegment.
-    nli          : NLI scorer (DeBERTa-v3-small) — reused, no extra load.
-    llm          : Per-hop reader LLM — reused for hop summarisation.
-
-    Returns
-    -------
-    dict
-    """
     logger.info("Building explainability report for claim %s.", verdict["claim_id"])
 
     saliency    = compute_evidence_saliency(hop_results, evidence, verdict["verdict"], nli)

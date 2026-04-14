@@ -1,21 +1,3 @@
-"""
-modules/module4_targeted_retrieval.py
---------------------------------------
-Module 4 — Targeted Retrieval
-
-Triggered only when gate_pass is False. Re-retrieves evidence for weak_aspects
-only, conditioned on what prior hops have already resolved. Loops up to
-MAX_RETRIEVAL_ROUNDS times, re-scoring after each round.
-
-The retriever uses the bge-small-en-v1.5 text encoder for dense cosine
-similarity search over an in-memory passage corpus. For production use,
-swap DenseRetriever for a BM25 or FAISS-backed store.
-
-Input  : ClaimDecomposition, VideoSegment, list[EvidenceRef],
-         ModalConflictReport, DenseRetriever, NLIScorer
-Output : (list[EvidenceRef], EvidenceStrengthReport)
-"""
-
 from __future__ import annotations
 
 import logging
@@ -37,16 +19,6 @@ MAX_RETRIEVAL_ROUNDS: int = 3
 
 @dataclass
 class DenseRetriever:
-    """
-    In-memory dense retriever backed by bge-small-en-v1.5.
-
-    Usage
-    -----
-    retriever = DenseRetriever(encoder)
-    retriever.index(passage_list)        # add passages once
-    results = retriever.search(query, top_k=3)
-    """
-
     encoder: TextEncoder
     _passages: list[dict] = field(default_factory=list, repr=False)
     _embeddings: torch.Tensor | None = field(default=None, repr=False)
@@ -63,10 +35,6 @@ class DenseRetriever:
         logger.info("DenseRetriever: indexed %d passages.", len(passages))
 
     def search(self, query: str, top_k: int = 3) -> list[dict]:
-        """
-        Return the top-k passages most similar to the query.
-        New passages get fresh UUIDs and hop_ids=[].
-        """
         if self._embeddings is None or len(self._passages) == 0:
             logger.debug("DenseRetriever.search called on empty index.")
             return []
@@ -130,25 +98,6 @@ def gated_retrieval_loop(
     max_rounds: int = MAX_RETRIEVAL_ROUNDS,
     resolved_hops: list[dict] | None = None,
 ) -> tuple[list[dict], dict]:
-    """
-    Iteratively retrieve targeted evidence for weak sub-questions until
-    the gate passes or max_rounds is exhausted.
-
-    Parameters
-    ----------
-    claim          : Decomposed claim from Module 1.
-    segment        : Source video segment (for transcript context).
-    evidence       : Starting evidence list (initial + pre-given).
-    modal_report   : Cross-modal report from Module 2.
-    retriever      : A DenseRetriever with an indexed corpus.
-    nli            : NLI scorer for re-scoring after each round.
-    max_rounds     : Maximum retrieval iterations.
-    resolved_hops  : Optional already-completed hop answers (used to condition queries).
-
-    Returns
-    -------
-    (final_evidence, final_strength_report)
-    """
     resolved_hops = resolved_hops or []
     report = None
 

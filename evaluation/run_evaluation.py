@@ -95,7 +95,6 @@ def evaluate_ground_truth(target_gt_path: str, json_path: str) -> None:
         all_evidences_content = {"Evidences": data["Evidences"]}
 
         def flatten_dict_values(d: Dict) -> str:
-            """Flatten nested dictionary values into a single string"""
             values = []
             for value in d.values():
                 if isinstance(value, dict):

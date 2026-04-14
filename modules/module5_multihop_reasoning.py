@@ -1,24 +1,3 @@
-"""
-modules/module5_multihop_reasoning.py
---------------------------------------
-Module 5 — Multi-Hop Reasoning
-
-Executes sub-questions sequentially. Each hop's answer conditions the next
-sub-question's retrieval query so reasoning evolves across hops rather than
-remaining static.
-
-Uses a small instruction-tuned LLM (Qwen2.5-3B or Phi-3-mini) constrained
-to short, JSON-structured outputs per hop.
-
-answer_unknown=True is the escape hatch — after max_retries failed parses
-the hop is marked unknown and downstream hops that depend on it are skipped,
-preventing hallucinated chain-of-reasoning.
-
-Input  : ClaimDecomposition, list[EvidenceRef], VideoSegment,
-         GenerativeLLM, DenseRetriever
-Output : list[HopResult]
-"""
-
 from __future__ import annotations
 
 import json
@@ -114,10 +93,6 @@ def run_single_hop(
     claim_id: str = "",
     max_retries: int = 2,
 ) -> dict:
-    """
-    Execute one hop with up to max_retries parse retries.
-    Returns a HopResult with answer_unknown=True on total failure.
-    """
     prompt = _build_hop_prompt(sq, prior_answers, passages)
 
     for attempt in range(max_retries + 1):
@@ -168,29 +143,6 @@ def run_multihop(
     llm: GenerativeLLM,
     retriever: DenseRetriever,
 ) -> list[dict]:
-    """
-    Execute all sub-questions in dependency order.
-
-    If a hop has no evidence assigned yet (hop_ids not matching) and its
-    evidence_type is not "video", a targeted retrieval query is issued before
-    running the hop.
-
-    Execution stops early if a hop returns answer_unknown=True and subsequent
-    hops depend on it.
-
-    Parameters
-    ----------
-    claim     : Decomposed claim from Module 1.
-    evidence  : Evidence pool (post Module 4).
-    segment   : Source video segment.
-    llm       : Per-hop generative LLM (Qwen2.5-3B or Phi-3-mini).
-    retriever : DenseRetriever for on-the-fly hop-level retrieval.
-
-    Returns
-    -------
-    list[dict]  — one per executed hop (may be shorter than sub_questions
-                       if an unknown hop terminates the chain early).
-    """
     hop_results: list[dict] = []
     unknown_hops: set[int] = set()
 

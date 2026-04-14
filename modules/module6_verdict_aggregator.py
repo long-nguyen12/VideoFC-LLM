@@ -1,27 +1,3 @@
-"""
-modules/module6_verdict_aggregator.py
---------------------------------------
-Module 6 — Verdict Aggregator
-
-Synthesises all hop answers, the modal conflict report, and the evidence
-strength report into a final labelled verdict with a step-by-step reasoning
-trace and a counterfactual.
-
-Uses Mistral-7B or LLaMA-3.1-8B — the only module that needs a larger
-context window because it must hold all hop answers simultaneously.
-
-Possible verdicts:
-  "supported"              — evidence and modalities consistently support the claim
-  "refuted"                — evidence clearly contradicts the claim
-  "insufficient_evidence"  — gate never passed; verdict unreliable
-  "misleading_context"     — claim is technically accurate but omits key context
-
-Input  : ClaimDecomposition, VideoSegment, visual_caption, list[HopResult],
-         ModalConflictReport, EvidenceStrengthReport, retrieval_rounds,
-         GenerativeLLM
-Output : FinalVerdict
-"""
-
 from __future__ import annotations
 
 import json
@@ -136,25 +112,6 @@ def aggregate_verdict(
     llm: GenerativeLLM,
     max_retries: int = 2,
 ) -> dict:
-    """
-    Synthesise all pipeline signals into a final verdict.
-
-    Parameters
-    ----------
-    claim             : Decomposed claim from Module 1.
-    segment           : Source video segment.
-    visual_caption    : Caption from the visual captioner.
-    hop_results       : All completed hop answers from Module 5.
-    modal_report      : Cross-modal consistency report from Module 2.
-    strength_report   : Evidence strength report from Module 3/4.
-    retrieval_rounds  : Number of retrieval rounds consumed (for transparency).
-    llm               : Aggregator LLM (Mistral-7B or LLaMA-3.1-8B).
-    max_retries       : Parse retry budget.
-
-    Returns
-    -------
-    dict
-    """
     # If gate never passed, emit insufficient_evidence without calling the LLM
     if not strength_report["gate_pass"]:
         logger.warning(
