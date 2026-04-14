@@ -333,7 +333,7 @@ def load_default_bundle(
 
 
 def load_single_llm_bundle(
-    llm_model: str = "Qwen/Qwen2.5-1.5B-Instruct",
+    llm_model: str = "Qwen/Qwen2.5-7B-Instruct",
     captioner_model: str = "Qwen/Qwen2-VL-2B-Instruct",
     nli_model: str = "cross-encoder/nli-deberta-v3-small",
     encoder_model: str = "BAAI/bge-small-en-v1.5",
@@ -353,7 +353,7 @@ def load_single_llm_bundle(
         llm_model,
         device=device,
         load_in_4bit=load_in_4bit,
-        max_new_tokens_cap=512,
+        max_new_tokens_cap=1024,
         context_window=context_window,
     )
     captioner = VisualCaptioner(captioner_model, device=device)
