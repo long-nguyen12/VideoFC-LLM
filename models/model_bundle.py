@@ -19,8 +19,9 @@ from transformers import (
     AutoTokenizer,
     LlavaNextForConditionalGeneration,
     LlavaNextProcessor,
-    Qwen2VLForConditionalGeneration
+    Qwen2VLForConditionalGeneration,
 )
+from ..modules.utils import safe_json_parse as _safe_json_parse
 
 hf_logging.set_verbosity_error()
 logger = logging.getLogger(__name__)
@@ -29,8 +30,10 @@ logger = logging.getLogger(__name__)
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _device() -> torch.device:
     return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 
 def _load_image(source: str) -> Image.Image:
     if source.startswith("data:image") or (
@@ -41,9 +44,11 @@ def _load_image(source: str) -> Image.Image:
         return Image.open(io.BytesIO(raw)).convert("RGB")
     return Image.open(source).convert("RGB")
 
+
 # ---------------------------------------------------------------------------
 # Visual Captioner (Qwen2-VL)
 # ---------------------------------------------------------------------------
+
 
 class VisualCaptioner:
     DEFAULT_MODEL = "Qwen/Qwen2-VL-2B-Instruct"
@@ -109,9 +114,11 @@ class VisualCaptioner:
 
         return " | ".join(captions)
 
+
 # ---------------------------------------------------------------------------
 # NLI Scorer (DeBERTa-v3-small)
 # ---------------------------------------------------------------------------
+
 
 class NLIScorer:
     DEFAULT_MODEL = "cross-encoder/nli-deberta-v3-small"
@@ -136,15 +143,22 @@ class NLIScorer:
     @torch.inference_mode()
     def entailment_score(self, premise: str, hypothesis: str) -> float:
         inputs = self.tokenizer(
-            premise, hypothesis, return_tensors="pt", truncation=True, max_length=512, padding=True
+            premise,
+            hypothesis,
+            return_tensors="pt",
+            truncation=True,
+            max_length=512,
+            padding=True,
         ).to(self.device)
         logits = self.model(**inputs).logits
         probs = torch.softmax(logits, dim=-1)
         return float(probs[0, self.ENTAILMENT_IDX].item())
 
+
 # ---------------------------------------------------------------------------
 # Text Encoder (bge-small-en-v1.5)
 # ---------------------------------------------------------------------------
+
 
 class TextEncoder:
     DEFAULT_MODEL = "BAAI/bge-small-en-v1.5"
@@ -164,7 +178,11 @@ class TextEncoder:
         for i in range(0, len(texts), batch_size):
             batch = texts[i : i + batch_size]
             inputs = self.tokenizer(
-                batch, padding=True, truncation=True, max_length=512, return_tensors="pt"
+                batch,
+                padding=True,
+                truncation=True,
+                max_length=512,
+                return_tensors="pt",
             ).to(self.device)
             outputs = self.model(**inputs)
             embeddings = outputs.last_hidden_state[:, 0, :]
@@ -178,9 +196,11 @@ class TextEncoder:
         scores = (q_emb @ p_emb.T).squeeze(0)
         return scores.tolist()
 
+
 # ---------------------------------------------------------------------------
 # Generative LLM wrapper (JSON-optimized)
 # ---------------------------------------------------------------------------
+
 
 class GenerativeLLM:
     def __init__(
@@ -191,26 +211,44 @@ class GenerativeLLM:
         max_new_tokens_cap: int = 256,
         context_window: int = 8192,
     ):
-        self.device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = device or torch.device(
+            "cuda" if torch.cuda.is_available() else "cpu"
+        )
         self.max_new_tokens_cap = max_new_tokens_cap
         self.context_window = context_window
-        
+
         logger.debug(
             "Loading generative LLM: %s (cap=%d, ctx=%d, 4bit=%s)",
-            model_name, max_new_tokens_cap, context_window, load_in_4bit
+            model_name,
+            max_new_tokens_cap,
+            context_window,
+            load_in_4bit,
         )
 
         quantization_config = None
         if load_in_4bit:
             from transformers import BitsAndBytesConfig
+
             quantization_config = BitsAndBytesConfig(
                 load_in_4bit=True,
                 bnb_4bit_quant_type="nf4",
                 bnb_4bit_use_double_quant=True,
-                bnb_4bit_compute_dtype=torch.bfloat16 if (self.device.type == "cuda" and torch.cuda.is_bf16_supported()) else torch.float16,
+                bnb_4bit_compute_dtype=(
+                    torch.bfloat16
+                    if (self.device.type == "cuda" and torch.cuda.is_bf16_supported())
+                    else torch.float16
+                ),
             )
 
-        dtype = None if load_in_4bit else (torch.bfloat16 if (self.device.type == "cuda" and torch.cuda.is_bf16_supported()) else torch.float16)
+        dtype = (
+            None
+            if load_in_4bit
+            else (
+                torch.bfloat16
+                if (self.device.type == "cuda" and torch.cuda.is_bf16_supported())
+                else torch.float16
+            )
+        )
 
         self.tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
         if self.tokenizer.pad_token is None:
@@ -224,26 +262,11 @@ class GenerativeLLM:
             low_cpu_mem_usage=True,
             device_map=self.device.type if self.device.type == "cuda" else None,
         )
-        
+
         if self.device.type != "cuda" or not hasattr(self.model, "hf_device_map"):
             self.model = self.model.to(self.device)
         self.model.eval()
         self._supports_chat_template = hasattr(self.tokenizer, "apply_chat_template")
-
-    @staticmethod
-    def extract_json(text: str) -> Optional[dict]:
-        """Robust JSON extraction with markdown cleanup and brace matching."""
-        text = text.strip()
-        if not text:
-            return None
-        text = re.sub(r'^```(?:json)?\s*|\s*```$', '', text, flags=re.MULTILINE).strip()
-        start, end = text.find("{"), text.rfind("}")
-        if start == -1 or end == -1 or end <= start:
-            return None
-        try:
-            return json.loads(text[start:end+1])
-        except json.JSONDecodeError:
-            return None
 
     @torch.inference_mode()
     def generate(
@@ -254,7 +277,7 @@ class GenerativeLLM:
         do_sample: bool = False,
     ) -> str:
         do_sample = do_sample and temperature > 0.0
-        
+
         if isinstance(prompt, list) and self._supports_chat_template:
             text = self.tokenizer.apply_chat_template(
                 prompt, tokenize=False, add_generation_prompt=True
@@ -265,7 +288,7 @@ class GenerativeLLM:
         inputs = self.tokenizer(
             text, return_tensors="pt", truncation=True, max_length=self.context_window
         ).to(self.device)
-        
+
         input_len = inputs["input_ids"].shape[1]
         effective_max = min(max_new_tokens, self.max_new_tokens_cap)
 
@@ -293,27 +316,40 @@ class GenerativeLLM:
     ) -> Optional[dict]:
         """Generates text and safely extracts a JSON object with retry logic."""
         current_prompt = prompt
-        
+
         for attempt in range(max_retries + 1):
             current_temp = temperature if attempt == 0 else 0.0
-            
+
             if attempt > 0 and isinstance(current_prompt, list):
                 current_prompt = copy.deepcopy(current_prompt)
-                current_prompt[-1]["content"] += "\n\nCRITICAL: Output ONLY valid JSON. Start with { and end with }."
+                current_prompt[-1][
+                    "content"
+                ] += (
+                    "\n\nCRITICAL: Output ONLY valid JSON. Start with { and end with }."
+                )
 
-            raw = self.generate(current_prompt, max_new_tokens=max_new_tokens, temperature=current_temp)
-            parsed = self.extract_json(raw)
-            
+            raw = self.generate(
+                current_prompt, max_new_tokens=max_new_tokens, temperature=current_temp
+            )
+            parsed = _safe_json_parse(raw)
+
             if parsed is not None:
                 return parsed
-            logger.warning("JSON extraction failed (attempt %d/%d). Raw: %.150s", attempt + 1, max_retries + 1, raw)
+            logger.warning(
+                "JSON extraction failed (attempt %d/%d). Raw: %.150s",
+                attempt + 1,
+                max_retries + 1,
+                raw,
+            )
 
         logger.error("Failed to extract valid JSON after %d attempts", max_retries + 1)
         return None
 
+
 # ---------------------------------------------------------------------------
 # Bundle Loaders
 # ---------------------------------------------------------------------------
+
 
 def load_default_bundle(
     captioner_model: str = "Qwen/Qwen2-VL-2B-Instruct",
@@ -323,7 +359,7 @@ def load_default_bundle(
     device = _device()
     shared_llm = GenerativeLLM(llm_model, device=device, load_in_4bit=load_in_4bit)
     captioner = VisualCaptioner(captioner_model, device=device)
-    
+
     return {
         "captioner": captioner,
         "caption_fn": captioner.caption,
@@ -332,6 +368,7 @@ def load_default_bundle(
         "aggregator_llm": shared_llm,
         "consistency_llm": shared_llm,
     }
+
 
 def load_single_llm_bundle(
     llm_model: str = "Qwen/Qwen2.5-7B-Instruct",
@@ -342,7 +379,10 @@ def load_single_llm_bundle(
     device = _device()
     logger.debug(
         "Loading single-LLM bundle: llm=%s  captioner=%s  4bit=%s  ctx=%d",
-        llm_model, captioner_model, load_in_4bit, context_window
+        llm_model,
+        captioner_model,
+        load_in_4bit,
+        context_window,
     )
 
     shared_llm = GenerativeLLM(
