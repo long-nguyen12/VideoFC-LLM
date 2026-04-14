@@ -21,7 +21,7 @@ from transformers import (
     LlavaNextProcessor,
     Qwen2VLForConditionalGeneration,
 )
-from ..modules.utils import safe_json_parse as _safe_json_parse
+from modules.utils import safe_json_parse as _safe_json_parse
 
 hf_logging.set_verbosity_error()
 logger = logging.getLogger(__name__)
@@ -113,93 +113,6 @@ class VisualCaptioner:
             captions.append(caption)
 
         return " | ".join(captions)
-
-
-# ---------------------------------------------------------------------------
-# NLI Scorer (DeBERTa-v3-small)
-# ---------------------------------------------------------------------------
-
-
-class NLIScorer:
-    DEFAULT_MODEL = "cross-encoder/nli-deberta-v3-small"
-    ENTAILMENT_IDX = 1
-
-    def __init__(
-        self, model_name: str = DEFAULT_MODEL, device: Optional[torch.device] = None
-    ):
-        self.device = device or _device()
-        logger.debug("Loading NLI scorer: %s", model_name)
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self.model = AutoModelForSequenceClassification.from_pretrained(model_name).to(
-            self.device
-        )
-        self.model.eval()
-        id2label = self.model.config.id2label
-        for idx, label in id2label.items():
-            if "entail" in label.lower():
-                self.ENTAILMENT_IDX = int(idx)
-                break
-
-    @torch.inference_mode()
-    def entailment_score(self, premise: str, hypothesis: str) -> float:
-        inputs = self.tokenizer(
-            premise,
-            hypothesis,
-            return_tensors="pt",
-            truncation=True,
-            max_length=512,
-            padding=True,
-        ).to(self.device)
-        logits = self.model(**inputs).logits
-        probs = torch.softmax(logits, dim=-1)
-        return float(probs[0, self.ENTAILMENT_IDX].item())
-
-
-# ---------------------------------------------------------------------------
-# Text Encoder (bge-small-en-v1.5)
-# ---------------------------------------------------------------------------
-
-
-class TextEncoder:
-    DEFAULT_MODEL = "BAAI/bge-small-en-v1.5"
-
-    def __init__(
-        self, model_name: str = DEFAULT_MODEL, device: Optional[torch.device] = None
-    ):
-        self.device = device or _device()
-        logger.debug("Loading text encoder: %s", model_name)
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self.model = AutoModel.from_pretrained(model_name).to(self.device)
-        self.model.eval()
-
-    @torch.inference_mode()
-    def encode(self, texts: list[str], batch_size: int = 64) -> torch.Tensor:
-        all_embeddings: list[torch.Tensor] = []
-        for i in range(0, len(texts), batch_size):
-            batch = texts[i : i + batch_size]
-            inputs = self.tokenizer(
-                batch,
-                padding=True,
-                truncation=True,
-                max_length=512,
-                return_tensors="pt",
-            ).to(self.device)
-            outputs = self.model(**inputs)
-            embeddings = outputs.last_hidden_state[:, 0, :]
-            embeddings = torch.nn.functional.normalize(embeddings, p=2, dim=-1)
-            all_embeddings.append(embeddings)
-        return torch.cat(all_embeddings, dim=0)
-
-    def similarity(self, query: str, passages: list[str]) -> list[float]:
-        q_emb = self.encode([query])
-        p_emb = self.encode(passages)
-        scores = (q_emb @ p_emb.T).squeeze(0)
-        return scores.tolist()
-
-
-# ---------------------------------------------------------------------------
-# Generative LLM wrapper (JSON-optimized)
-# ---------------------------------------------------------------------------
 
 
 class GenerativeLLM:
