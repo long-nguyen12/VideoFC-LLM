@@ -104,8 +104,10 @@ def main():
             )
             results.append(result)
             
-            is_correct = "✓" if result.correct else "✗"
-            logger.info(f"  -> Pred: {result.pred_verdict:<22} Gold: {result.gold_verdict:<22} {is_correct}")
+            is_correct = "✓" if result["correct"] else "✗"
+            logger.info(
+                f"  -> Pred: {result['pred_verdict']:<22} Gold: {result['gold_verdict']:<22} {is_correct}"
+            )
             
             # Auto-save incrementally so results are never lost on crash
             partial_summary = compute_metrics(results)
@@ -116,11 +118,11 @@ def main():
                     "status": f"In progress ({i}/{len(items)})",
                     "results": [
                         {
-                            "claim_id": r.claim_id,
-                            "pred_verdict": r.pred_verdict,
-                            "gold_verdict": r.gold_verdict,
-                            "correct": r.correct,
-                            "report": r.report.model_dump()
+                            "claim_id": r["claim_id"],
+                            "pred_verdict": r["pred_verdict"],
+                            "gold_verdict": r["gold_verdict"],
+                            "correct": r["correct"],
+                            "report": r["report"],
                         }
                         for r in results
                     ]

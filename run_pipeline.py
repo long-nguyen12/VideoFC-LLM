@@ -20,14 +20,13 @@ Wraps the core run_pipeline() with two dataset-specific adaptations:
 
 3. Evaluation helpers
    run_dataset_record() returns both the ExplainabilityReport and a
-   DatasetEvalResult that records the gold label, predicted label, and
+   plain dict that records the gold label, predicted label, and
    whether the predicted verdict matches the gold verdict.
 """
 
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
 
 from models.model_bundle import ModelBundle
 from modules.module1_claim_decomposer import decompose_claim
@@ -45,36 +44,6 @@ from dataset import (
 )
 
 logger = logging.getLogger(__name__)
-
-
-# ---------------------------------------------------------------------------
-# Evaluation result
-# ---------------------------------------------------------------------------
-
-@dataclass
-class DatasetEvalResult:
-    """
-    Pairs a pipeline output with its ground-truth label for evaluation.
-
-    Attributes
-    ----------
-    claim_id        : Pipeline claim ID.
-    gold_verdict    : Gold verdict from the dataset (via label_mapper).
-    gold_label      : Integer class index of gold_verdict.
-    pred_verdict    : Predicted verdict from the pipeline.
-    pred_label      : Integer class index of pred_verdict.
-    pred_confidence : Pipeline confidence score.
-    correct         : True if pred_verdict == gold_verdict.
-    report          : Full ExplainabilityReport.
-    """
-    claim_id: str
-    gold_verdict: str
-    gold_label: int
-    pred_verdict: str
-    pred_label: int
-    pred_confidence: float
-    correct: bool
-    report: dict
 
 
 # ---------------------------------------------------------------------------
@@ -245,7 +214,7 @@ def run_dataset_record(
     retriever: DenseRetriever,
     use_rationale_hints: bool = True,
     keyframe_paths: list[str] | None = None,
-) -> DatasetEvalResult:
+) -> dict:
     """
     Run the full pipeline on a single DatasetRecord and return an eval result.
 
@@ -260,7 +229,7 @@ def run_dataset_record(
 
     Returns
     -------
-    DatasetEvalResult
+    dict
     """
     inputs = record_to_pipeline_inputs(record, keyframe_paths=keyframe_paths)
 
@@ -273,13 +242,13 @@ def run_dataset_record(
         use_rationale_hints=use_rationale_hints,
     )
     pred_label = verdict_to_label(report.get("verdict", "unknown"))
-    return DatasetEvalResult(
-        claim_id=inputs["claim_id"],
-        gold_verdict=inputs["gold_verdict"],
-        gold_label=inputs["gold_label"],
-        pred_verdict=report.get("verdict", "unknown"),
-        pred_label=pred_label,
-        pred_confidence=report.get("confidence", 0.0),
-        correct=(report.get("verdict", "unknown") == inputs["gold_verdict"]),
-        report=report,
-    )
+    return {
+        "claim_id": inputs["claim_id"],
+        "gold_verdict": inputs["gold_verdict"],
+        "gold_label": inputs["gold_label"],
+        "pred_verdict": report.get("verdict", "unknown"),
+        "pred_label": pred_label,
+        "pred_confidence": report.get("confidence", 0.0),
+        "correct": report.get("verdict", "unknown") == inputs["gold_verdict"],
+        "report": report,
+    }

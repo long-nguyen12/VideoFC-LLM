@@ -659,24 +659,25 @@ class TestDatasetPipeline:
 class TestEvaluation:
 
     def _make_result(self, gold_verdict, pred_verdict, confidence=0.8):
-        """Build a minimal DatasetEvalResult stub."""
-        from run_pipeline import DatasetEvalResult
-        from dataset.true_dataset_loader import rating_to_verdict, VERDICT_TO_LABEL, label_to_verdict, rating_to_label, NUM_LABELS
-        
-        report = dict(
-            claim_id="c", segment_id="s",
-            verdict=pred_verdict, confidence=confidence,
-        )
-        return DatasetEvalResult(
-            claim_id="c",
-            gold_verdict=gold_verdict,
-            gold_label=verdict_to_label(gold_verdict),
-            pred_verdict=pred_verdict,
-            pred_label=verdict_to_label(pred_verdict),
-            pred_confidence=confidence,
-            correct=(gold_verdict == pred_verdict),
-            report=report,
-        )
+        """Build a minimal evaluation-result dict stub."""
+        from dataset.true_dataset_loader import verdict_to_label
+
+        report = {
+            "claim_id": "c",
+            "segment_id": "s",
+            "verdict": pred_verdict,
+            "confidence": confidence,
+        }
+        return {
+            "claim_id": "c",
+            "gold_verdict": gold_verdict,
+            "gold_label": verdict_to_label(gold_verdict),
+            "pred_verdict": pred_verdict,
+            "pred_label": verdict_to_label(pred_verdict),
+            "pred_confidence": confidence,
+            "correct": gold_verdict == pred_verdict,
+            "report": report,
+        }
 
     def test_perfect_accuracy(self):
         from dataset.evaluation import compute_metrics

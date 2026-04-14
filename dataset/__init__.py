@@ -9,7 +9,6 @@ Public surface
   run_pipeline_evaluation  — run the full LLM pipeline on a dataset split
   record_to_pipeline_inputs— converts a record into all pipeline inputs
   run_dataset_record       — run the full pipeline on one record + eval result
-  DatasetEvalResult        — (gold, predicted, correct) evaluation container
   compute_metrics          — compute P/R/F1 from a list of eval results
   EvaluationSummary        — structured metric report
   rating_to_verdict        — Snopes rating → pipeline verdict
@@ -37,7 +36,6 @@ from .true_dataset_loader import (
 from run_pipeline import (
     run_dataset_pipeline,
     run_dataset_record,
-    DatasetEvalResult,
 )
 from .evaluation import compute_metrics, EvaluationSummary, log_summary
 
@@ -51,7 +49,6 @@ __all__ = [
     "record_to_visual_caption",
     "run_dataset_pipeline",
     "run_dataset_record",
-    "DatasetEvalResult",
     "compute_metrics",
     "EvaluationSummary",
     "log_summary",

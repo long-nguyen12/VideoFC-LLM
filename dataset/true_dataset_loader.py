@@ -486,7 +486,7 @@ def run_pipeline_evaluation(
     seed: int = 42,
     train_frac: float = 0.8,
     limit_samples: Optional[int] = None,
-) -> list["DatasetEvalResult"]:
+) -> list[dict]:
     """
     End-to-end convenience: load a split and run every record through the
     7-module LLM fact-checking pipeline, returning evaluation results.
@@ -509,7 +509,7 @@ def run_pipeline_evaluation(
 
     Returns
     -------
-    list[DatasetEvalResult]
+    list[dict]
         One result per successfully processed record.
 
     Example
@@ -517,12 +517,11 @@ def run_pipeline_evaluation(
     >>> results = run_pipeline_evaluation(
     ...     split="test", models=bundle, retriever=retriever,
     ... )
-    >>> accuracy = sum(r.correct for r in results) / len(results)
+    >>> accuracy = sum(r["correct"] for r in results) / len(results)
     """
     # Lazy import to avoid circular dependencies at module level
     from run_pipeline import (
         run_dataset_record,
-        DatasetEvalResult,
     )  # noqa: F811
 
     if models is None or retriever is None:
@@ -536,7 +535,7 @@ def run_pipeline_evaluation(
         limit_samples=limit_samples,
     )
 
-    results: list[DatasetEvalResult] = []
+    results: list[dict] = []
     total = len(items)
 
     for i, (record, kf_paths) in enumerate(items, 1):
@@ -551,11 +550,11 @@ def run_pipeline_evaluation(
                 keyframe_paths=kf_paths if kf_paths else None,
             )
             results.append(result)
-            tag = "✓" if result.correct else "✗"
+            tag = "✓" if result["correct"] else "✗"
             logger.info(
                 "  → Pred: %-22s Gold: %-22s %s",
-                result.pred_verdict,
-                result.gold_verdict,
+                result["pred_verdict"],
+                result["gold_verdict"],
                 tag,
             )
         except Exception as exc:
@@ -565,6 +564,6 @@ def run_pipeline_evaluation(
         "Pipeline evaluation complete: %d/%d records processed, accuracy=%.2f%%",
         len(results),
         total,
-        100.0 * sum(r.correct for r in results) / max(len(results), 1),
+        100.0 * sum(r["correct"] for r in results) / max(len(results), 1),
     )
     return results

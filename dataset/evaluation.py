@@ -3,7 +3,7 @@ dataset/evaluation.py
 ----------------------
 Evaluation utilities for batch dataset runs.
 
-Computes per-class and macro metrics from a list of DatasetEvalResult objects:
+Computes per-class and macro metrics from a list of evaluation dicts:
   accuracy, precision, recall, F1 (macro + per-class)
 
 All metrics are computed without external dependencies (no scikit-learn
@@ -118,13 +118,13 @@ class EvaluationSummary:
 # Public API
 # ---------------------------------------------------------------------------
 
-def compute_metrics(results: list) -> EvaluationSummary:
+def compute_metrics(results: list[dict]) -> EvaluationSummary:
     """
-    Compute classification metrics from a list of DatasetEvalResult objects.
+    Compute classification metrics from a list of evaluation dicts.
 
     Parameters
     ----------
-    results : list[DatasetEvalResult]
+    results : list[dict]
 
     Returns
     -------
@@ -149,9 +149,9 @@ def compute_metrics(results: list) -> EvaluationSummary:
     correct = 0
 
     for r in results:
-        g, p = r.gold_label, r.pred_label
-        gold_dist[r.gold_verdict] += 1
-        pred_dist[r.pred_verdict] += 1
+        g, p = r["gold_label"], r["pred_label"]
+        gold_dist[r["gold_verdict"]] += 1
+        pred_dist[r["pred_verdict"]] += 1
 
         classes[g].support += 1
 
