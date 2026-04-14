@@ -3,11 +3,7 @@ from __future__ import annotations
 import logging
 
 from modules.module1_claim_decomposer import decompose_claim
-from modules.module2_cross_modal_consistency import (
-    compute_modal_consistency,
-    compute_modal_consistency_llm,
-)
-from modules.module3_evidence_strength import score_evidence
+from modules.module2_cross_modal_consistency import compute_modal_consistency_llm
 from modules.module4_targeted_retrieval import DenseRetriever, gated_retrieval_loop
 from modules.module5_multihop_reasoning import run_multihop
 from modules.module6_verdict_aggregator import aggregate_verdict
@@ -108,7 +104,7 @@ def run_fc_pipeline(
         evidence=list(inputs["initial_evidence"]),
         modal_report=modal_report,
         retriever=retriever,
-        nli=models["nli"],
+        llm=models["hop_llm"],
     )
     retrieval_rounds = 0 if strength_report["gate_pass"] else MAX_RETRIEVAL_ROUNDS
     logger.info(
@@ -161,7 +157,6 @@ def run_fc_pipeline(
         evidence=evidence,
         modal_report=modal_report,
         segment=segment,
-        nli=models["nli"],
         llm=models["hop_llm"],
     )
 

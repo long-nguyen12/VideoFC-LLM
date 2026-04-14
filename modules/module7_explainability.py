@@ -1,11 +1,8 @@
 from __future__ import annotations
 
-import json
 import logging
-import re
 
-from typing import Any
-from models import GenerativeLLM, NLIScorer
+from models import GenerativeLLM
 from modules.utils import safe_json_parse as _safe_json_parse
 
 logger = logging.getLogger(__name__)
@@ -13,18 +10,20 @@ logger = logging.getLogger(__name__)
 NLI_CONFLICT_FLOOR: float = 0.40
 
 
-# ---------------------------------------------------------------------------
-# 1. Evidence saliency
-# ---------------------------------------------------------------------------
-
 def compute_evidence_saliency(
     hop_results: list[dict],
     evidence: list[dict],
     verdict_label: str,
-    nli: NLIScorer,
+    llm: GenerativeLLM,
 ) -> list[dict]:
     evidence_map: dict[str, dict] = {e["evidence_id"]: e for e in evidence}
     saliency_list: list[dict] = []
+
+    score_system_prompt = """\
+You are scoring how much one evidence passage supports a final verdict label.
+Return ONLY valid JSON:
+{"score": <float in [0.0, 1.0]>}
+"""
 
     for hop in hop_results:
         if not hop.get("supported_by"):
@@ -33,16 +32,34 @@ def compute_evidence_saliency(
         raw_scores: dict[str, float] = {}
         for eid in hop.get("supported_by", []):
             if eid not in evidence_map:
-                logger.debug("Evidence %s not found in evidence pool — skipping.", eid)
+                logger.debug("Evidence %s not found in evidence pool - skipping.", eid)
                 continue
-            passage = evidence_map[eid]["passage_text"]
-            raw_scores[eid] = nli.entailment_score(passage, verdict_label)
+
+            passage = evidence_map[eid].get("passage_text", "")
+            prompt = [
+                {"role": "system", "content": score_system_prompt},
+                {
+                    "role": "user",
+                    "content": (
+                        f'Verdict label: "{verdict_label}"\n'
+                        f'Passage: "{passage[:2000]}"\n'
+                        "Output JSON only."
+                    ),
+                },
+            ]
+            try:
+                data = _safe_json_parse(llm.generate(prompt, max_new_tokens=96))
+                if not isinstance(data, dict):
+                    score = 0.0
+                else:
+                    score = float(data.get("score", 0.0))
+            except Exception:
+                score = 0.0
+            raw_scores[eid] = max(0.0, min(1.0, score))
 
         total = sum(raw_scores.values()) or 1.0
-
         for eid, score in raw_scores.items():
-            passage_text = evidence_map[eid]["passage_text"]
-            # Key span: sentence with highest token overlap with the verdict label
+            passage_text = evidence_map[eid].get("passage_text", "")
             sentences = [s.strip() for s in passage_text.split(".") if s.strip()]
             verdict_tokens = set(verdict_label.lower().split())
             key_span = max(
@@ -50,7 +67,6 @@ def compute_evidence_saliency(
                 key=lambda s: len(set(s.lower().split()) & verdict_tokens),
                 default=sentences[0] if sentences else passage_text[:120],
             )
-
             saliency_list.append(
                 {
                     "evidence_id": eid,
@@ -62,10 +78,6 @@ def compute_evidence_saliency(
 
     return saliency_list
 
-
-# ---------------------------------------------------------------------------
-# 2. Modal annotations
-# ---------------------------------------------------------------------------
 
 _PAIR_LABELS: dict[str, str] = {
     "V↔C": "Visual content contradicts claim",
@@ -80,9 +92,9 @@ def build_modal_annotations(
     conflict_floor: float = NLI_CONFLICT_FLOOR,
 ) -> list[dict]:
     pair_scores: dict[str, float] = {
-        "V↔C": modal_report["vc_score"],
-        "T↔C": modal_report["tc_score"],
-        "V↔T": modal_report["vt_score"],
+        "V↔C": modal_report.get("vc_score", 0.0),
+        "T↔C": modal_report.get("tc_score", 0.0),
+        "V↔T": modal_report.get("vt_score", 0.0),
     }
     annotations: list[dict] = []
 
@@ -96,7 +108,7 @@ def build_modal_annotations(
                     "timestamp": segment["start_ts"],
                     "human_note": (
                         f"{label} at {segment['start_ts']}s "
-                        f"({pair} NLI score: {score:.2f})."
+                        f"({pair} consistency score: {score:.2f})."
                     ),
                 }
             )
@@ -104,27 +116,13 @@ def build_modal_annotations(
     return annotations
 
 
-# ---------------------------------------------------------------------------
-# 3. Hop summaries
-# JSON parsing — shared implementation lives in modules/utils.py
 _SUMMARY_SYSTEM_PROMPT = """\
 You are an explainability assistant for a video fact-checking system.
 Given one intermediate reasoning answer and its supporting evidence IDs,
 write exactly one plain-language sentence that a non-expert could read.
-Do not use jargon. Do not start with "I".
 
-OUTPUT FORMAT RULES (MANDATORY):
-1. Respond ONLY with a valid JSON object. Do not include markdown, code blocks, explanations, greetings, or any text outside the JSON.
-2. Use double quotes for ALL keys and string values. Single quotes are invalid JSON and will cause parsing errors.
-3. Ensure proper JSON escaping for special characters (e.g., \\", \\\\, \\n).
-4. Do not include trailing commas, comments, or schema annotations in the output.
-5. The "summary" field must contain exactly one plain-language sentence.
-6. Do not start the summary with "I", "The model", or any self-referential phrase.
-
-REQUIRED JSON SCHEMA:
-{{
-  "summary": "<string, exactly one sentence>"
-}}
+Respond ONLY with valid JSON:
+{"summary": "<exactly one sentence>"}
 """
 
 
@@ -133,23 +131,12 @@ def _build_summary_prompt(hop: dict) -> list[dict[str, str]]:
         f'Hop {hop["hop"]}: Q: "{hop["question"]}"\n'
         f'Answer: "{hop["answer"]}" (confidence: {hop["confidence"]:.2f})\n'
         f"Supporting evidence: {hop.get('supported_by')}\n\n"
-        "Summarise in one sentence. Output ONLY valid JSON. Start your response with { and end with }."
+        "Summarise in one sentence. Output JSON only."
     )
     return [
         {"role": "system", "content": _SUMMARY_SYSTEM_PROMPT},
-        {"role": "user",   "content": user_content},
+        {"role": "user", "content": user_content},
     ]
-
-
-def _safe_json_parse(raw: str) -> dict[str, Any]:
-    cleaned = re.sub(r"^```(?:json)?\s*", "", raw.strip(), flags=re.IGNORECASE)
-    cleaned = re.sub(r"\s*```$", "", cleaned.strip())
-    start = cleaned.find("{")
-    end   = cleaned.rfind("}") + 1
-    if start == -1 or end == 0:
-        raise ValueError(f"No JSON found in: {raw[:200]}")
-    return json.loads(cleaned[start:end])
-
 
 
 def generate_hop_summaries(
@@ -170,17 +157,20 @@ def generate_hop_summaries(
             prompt = _build_summary_prompt(hop)
             raw = llm.generate(prompt, max_new_tokens=128)
             data = _safe_json_parse(raw)
-            summaries.append(data.get("summary", hop["answer"]))
+            if not isinstance(data, dict):
+                summaries.append(hop["answer"])
+            else:
+                summaries.append(data.get("summary", hop["answer"]))
         except Exception as exc:
-            logger.warning("Hop %d summary generation failed: %s — using answer as fallback.", hop["hop"], exc)
+            logger.warning(
+                "Hop %d summary generation failed: %s - using answer as fallback.",
+                hop["hop"],
+                exc,
+            )
             summaries.append(hop["answer"])
 
     return summaries
 
-
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
 
 def build_explainability_report(
     verdict: dict,
@@ -188,14 +178,13 @@ def build_explainability_report(
     evidence: list[dict],
     modal_report: dict,
     segment: dict,
-    nli: NLIScorer,
     llm: GenerativeLLM,
 ) -> dict:
     logger.info("Building explainability report for claim %s.", verdict["claim_id"])
 
-    saliency    = compute_evidence_saliency(hop_results, evidence, verdict["verdict"], nli)
+    saliency = compute_evidence_saliency(hop_results, evidence, verdict["verdict"], llm)
     annotations = build_modal_annotations(modal_report, segment)
-    summaries   = generate_hop_summaries(hop_results, llm)
+    summaries = generate_hop_summaries(hop_results, llm)
 
     return {
         "claim_id": verdict["claim_id"],

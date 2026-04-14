@@ -173,14 +173,21 @@ def run_multihop(
         # If no evidence is pre-assigned and hop is not video-only, retrieve on the fly
         if not relevant and sq.get("evidence_type", "any") != "video":
             query = build_retrieval_query(sq["question"], hop_results, segment)
-            retrieved = retriever.search(query, top_k=3)
+            retrieved = retriever.search(query, llm=llm, top_k=3)
             for p in retrieved:
                 if sq["hop"] not in p["hop_ids"]:
                     p["hop_ids"].append(sq["hop"])
-            existing_ids = {e["evidence_id"] for e in evidence}
+            existing_by_id = {e["evidence_id"]: e for e in evidence}
             for p in retrieved:
-                if p["evidence_id"] not in existing_ids:
+                existing = existing_by_id.get(p["evidence_id"])
+                if existing is None:
                     evidence.append(p)
+                    existing_by_id[p["evidence_id"]] = p
+                else:
+                    existing_hops = existing.setdefault("hop_ids", [])
+                    for hop_id in p.get("hop_ids", []):
+                        if hop_id not in existing_hops:
+                            existing_hops.append(hop_id)
             relevant = retrieved
 
         prior = {h["hop"]: h["answer"] for h in hop_results if h["hop"] in sq.get("depends_on_hops", [])}

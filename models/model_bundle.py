@@ -317,19 +317,16 @@ class GenerativeLLM:
 
 def load_default_bundle(
     captioner_model: str = "Qwen/Qwen2-VL-2B-Instruct",
-    nli_model: str = "cross-encoder/nli-deberta-v3-small",
-    encoder_model: str = "BAAI/bge-small-en-v1.5",
     llm_model: str = "Qwen/Qwen2.5-3B-Instruct",
     load_in_4bit: bool = False,
 ) -> dict:
     device = _device()
     shared_llm = GenerativeLLM(llm_model, device=device, load_in_4bit=load_in_4bit)
+    captioner = VisualCaptioner(captioner_model, device=device)
     
     return {
-        "captioner": VisualCaptioner(captioner_model, device=device),
-        "caption_fn": VisualCaptioner(captioner_model, device=device).caption,
-        "nli": NLIScorer(nli_model, device=device),
-        "encoder": TextEncoder(encoder_model, device=device),
+        "captioner": captioner,
+        "caption_fn": captioner.caption,
         "decomposer_llm": shared_llm,
         "hop_llm": shared_llm,
         "aggregator_llm": shared_llm,
@@ -339,8 +336,6 @@ def load_default_bundle(
 def load_single_llm_bundle(
     llm_model: str = "Qwen/Qwen2.5-7B-Instruct",
     captioner_model: str = "Qwen/Qwen2-VL-2B-Instruct",
-    nli_model: str = "cross-encoder/nli-deberta-v3-small",
-    encoder_model: str = "BAAI/bge-small-en-v1.5",
     load_in_4bit: bool = False,
     context_window: int = 8192,
 ) -> dict:
@@ -362,8 +357,6 @@ def load_single_llm_bundle(
     return {
         "captioner": captioner,
         "caption_fn": captioner.caption,
-        "nli": NLIScorer(nli_model, device=device),
-        "encoder": TextEncoder(encoder_model, device=device),
         "decomposer_llm": shared_llm,
         "hop_llm": shared_llm,
         "aggregator_llm": shared_llm,
