@@ -47,7 +47,6 @@ def _build_hop_prompt(
         f'Sub-question (hop {sq["hop"]}): "{sq["question"]}"\n'
         f"{prior_text}"
         f"Retrieved passages:\n{_format_passages(passages)}\n\n"
-        "Answer concisely. Output ONLY valid JSON. Start your response with { and end with }."
     )
     return [
         {"role": "system", "content": _HOP_SYSTEM_PROMPT},

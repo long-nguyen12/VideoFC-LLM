@@ -124,7 +124,6 @@ def _build_summary_prompt(hop: dict) -> list[dict[str, str]]:
         f'Hop {hop["hop"]}: Q: "{hop["question"]}"\n'
         f'Answer: "{hop["answer"]}" (confidence: {hop["confidence"]:.2f})\n'
         f"Supporting evidence: {hop.get('supported_by')}\n\n"
-        "Summarise in one sentence. Output JSON only."
     )
     return [
         {"role": "system", "content": _SUMMARY_SYSTEM_PROMPT},

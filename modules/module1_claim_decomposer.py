@@ -38,7 +38,6 @@ def _build_user_message(
         f'Transcript: "{transcript_excerpt}"\n'
         f"Conflict flag: {conflict_flag}\n"
         f"{hint_block}\n"
-        "Decompose this claim. Output ONLY valid JSON. Start your response with { and end with }."
     )
 
 

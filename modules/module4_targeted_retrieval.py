@@ -44,7 +44,6 @@ def _llm_retrieval_score(
             "content": (
                 f'Query: "{query}"\n'
                 f'Passage: "{passage_text}"\n'
-                "Output JSON only."
             ),
         },
     ]

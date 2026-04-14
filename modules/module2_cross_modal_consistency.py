@@ -48,7 +48,6 @@ def _build_modal_llm_prompt(
         f'Visual caption: "{visual_esc}"\n'
         f'Transcript: "{transcript_esc}"\n\n'
         f"{content_block}"
-        "Respond with valid JSON only. No other text."
     )
     return [
         {"role": "system", "content": _LLM_MODAL_SYSTEM_PROMPT},

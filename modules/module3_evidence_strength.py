@@ -40,7 +40,6 @@ def _llm_passage_score(
             "content": (
                 f'Question: "{question}"\n'
                 f'Passage: "{passage_text}"\n'
-                "Output JSON only."
             ),
         },
     ]

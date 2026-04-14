@@ -56,7 +56,6 @@ def _build_aggregator_prompt(
         f"Hops:\n{_format_hop_answers(hop_results)}\n\n"
         f"Modal: {conflict_line}\n"
         f"Gate:  {gate_line}\n\n"
-        "Produce the verdict. Output ONLY valid JSON. Start your response with { and end with }."
     )
     return [
         {"role": "system", "content": _AGGREGATOR_SYSTEM_PROMPT},
