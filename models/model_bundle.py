@@ -118,7 +118,7 @@ class VisualCaptioner:
 class GenerativeLLM:
     def __init__(
         self,
-        model_name: str = "Qwen/Qwen2.5-3B-Instruct",
+        model_name: str = "Qwen/Qwen3.5-4B",
         device: Optional[torch.device] = None,
         load_in_4bit: bool = False,
         max_new_tokens_cap: int = 256,
@@ -396,7 +396,7 @@ def load_default_bundle(
 
 
 def load_single_llm_bundle(
-    llm_model: str = "Qwen/Qwen2.5-7B-Instruct",
+    llm_model: str = "Qwen/Qwen3.5-4B",
     captioner_model: str = "Qwen/Qwen2-VL-2B-Instruct",
     load_in_4bit: bool = False,
     context_window: int = 8192,
