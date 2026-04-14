@@ -5,15 +5,30 @@ import re
 from typing import Any
 
 
-def safe_json_parse(raw: str, context: str = "") -> dict[str, Any]:
-    cleaned = re.sub(r"^```(?:json)?\s*", "", raw.strip(), flags=re.IGNORECASE)
-    cleaned = re.sub(r"\s*```$", "", cleaned.strip())
+def safe_json_parse(text: str) -> dict[str, Any]:
+    text = text.strip()
 
-    # Find outermost { ... }
-    start = cleaned.find("{")
-    end   = cleaned.rfind("}") + 1
-    if start == -1 or end == 0:
-        loc = f" in {context}" if context else ""
-        raise ValueError(f"No JSON object found{loc}: {raw[:300]!r}")
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
 
-    return json.loads(cleaned[start:end])
+    try:
+        start = text.find("{")
+        end = text.rfind("}") + 1
+        if start != -1 and end != 0:
+            candidate = text[start:end]
+            return json.loads(candidate)
+    except json.JSONDecodeError:
+        pass
+
+    # Strategy 3: Remove markdown code fences if present
+    try:
+        cleaned = re.sub(
+            r"^```(?:json)?\s*|\s*```$", "", text, flags=re.MULTILINE
+        ).strip()
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        pass
+
+    return None
