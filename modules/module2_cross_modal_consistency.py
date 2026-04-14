@@ -140,6 +140,7 @@ def compute_modal_consistency_llm(
     for attempt in range(max_retries + 1):
         try:
             raw = llm.generate(prompt, max_new_tokens=512)
+            print(f"LLM raw output (attempt {attempt + 1}): {raw}")
             data = _safe_json_parse(raw)
 
             vc = _clamp_01(data.get("vc_score"))
