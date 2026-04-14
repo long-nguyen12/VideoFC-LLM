@@ -192,9 +192,18 @@ class GenerativeLLM:
         do_sample = do_sample and temperature > 0.0
 
         if isinstance(prompt, list) and self._supports_chat_template:
-            text = self.tokenizer.apply_chat_template(
-                prompt, tokenize=False, add_generation_prompt=True
-            )
+            try:
+                text = self.tokenizer.apply_chat_template(
+                    prompt,
+                    tokenize=False,
+                    add_generation_prompt=True,
+                    enable_thinking=False,
+                )
+            except TypeError:
+                # Fallback for tokenizers that don't support enable_thinking
+                text = self.tokenizer.apply_chat_template(
+                    prompt, tokenize=False, add_generation_prompt=True
+                )
         else:
             text = prompt if isinstance(prompt, str) else str(prompt)
 
@@ -268,9 +277,18 @@ class GenerativeLLM:
         return None
 
     @staticmethod
+    def _strip_thinking(text: str) -> str:
+        """Remove Qwen3 <think>...</think> blocks before JSON extraction."""
+        return re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
+
+    @staticmethod
     def extract_json(text: str) -> Optional[dict]:
         """Robust JSON extraction with newline escaping and brace-matching fallback."""
         if not text or not isinstance(text, str):
+            return None
+
+        text = GenerativeLLM._strip_thinking(text)
+        if not text:
             return None
 
         def _try_load_dict(raw: str) -> Optional[dict]:
