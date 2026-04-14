@@ -273,12 +273,23 @@ class GenerativeLLM:
         if not text or not isinstance(text, str):
             return None
 
-        # Pre-process: escape literal newlines inside string values
-        preprocessed = GenerativeLLM._escape_literal_newlines_in_json(text)
+        def _try_load_dict(raw: str) -> Optional[dict]:
+            escaped = GenerativeLLM._escape_literal_newlines_in_json(raw)
+            try:
+                data = json.loads(escaped)
+                return data if isinstance(data, dict) else None
+            except json.JSONDecodeError:
+                return None
 
+        # Pre-process: escape literal newlines inside string values
         # Strategy 1: Try parsing preprocessed text
+        parsed = _try_load_dict(text)
+        if parsed is not None:
+            return parsed
         try:
-            return json.loads(preprocessed)
+            # Keep debug context from the previous behavior for faster triage.
+            preprocessed = GenerativeLLM._escape_literal_newlines_in_json(text)
+            json.loads(preprocessed)
         except json.JSONDecodeError as e:
             logger.debug("Preprocessed parse failed at pos %d: %s", e.pos, e.msg)
             # Log context for debugging
@@ -287,45 +298,40 @@ class GenerativeLLM:
                 ctx_end = min(len(preprocessed), e.pos + 40)
                 logger.debug("Error context: %r", preprocessed[ctx_start:ctx_end])
 
-        # Strategy 2: Try original text with brace-matching extraction
+        # Strategy 2: Try all brace-matched JSON object candidates.
         cleaned = text.strip()
-        start = cleaned.find("{")
-        if start == -1:
-            return None
-
-        # Brace-matching to find complete JSON object
-        depth, end, in_str, esc = 0, -1, False, False
-        for i, c in enumerate(cleaned[start:], start):
-            if esc:
-                esc = False
+        starts = [i for i, ch in enumerate(cleaned) if ch == "{"]
+        for start in starts:
+            depth, end, in_str, esc = 0, -1, False, False
+            for i, c in enumerate(cleaned[start:], start):
+                if esc:
+                    esc = False
+                    continue
+                if c == "\\" and in_str:
+                    esc = True
+                    continue
+                if c == '"':
+                    in_str = not in_str
+                    continue
+                if in_str:
+                    continue
+                if c == "{":
+                    depth += 1
+                elif c == "}":
+                    depth -= 1
+                    if depth == 0:
+                        end = i + 1
+                        break
+            if end == -1:
                 continue
-            if c == "\\" and in_str:
-                esc = True
-                continue
-            if c == '"' and not esc:
-                in_str = not in_str
-                continue
-            if in_str:
-                continue
-            if c == "{":
-                depth += 1
-            elif c == "}":
-                depth -= 1
-                if depth == 0:
-                    end = i + 1
-                    break
+            candidate = cleaned[start:end]
+            parsed = _try_load_dict(candidate)
+            if parsed is not None:
+                return parsed
 
-        if end == -1:
-            return None
-
-        candidate = cleaned[start:end]
-        candidate_escaped = GenerativeLLM._escape_literal_newlines_in_json(candidate)
-
-        try:
-            return json.loads(candidate_escaped)
-        except json.JSONDecodeError as e:
-            logger.debug("Brace-matched parse failed: %s", e)
-            return None
+        # Strategy 3: shared fallback parser for compatibility with other modules.
+        fallback = _safe_json_parse(text)
+        return fallback if isinstance(fallback, dict) else None
 
     @staticmethod
     def _escape_literal_newlines_in_json(text: str) -> str:
