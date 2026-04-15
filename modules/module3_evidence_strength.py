@@ -67,7 +67,10 @@ def score_evidence(
             continue
 
         per_passage_scores = [
-            _llm_passage_score(llm, sq["question"], e.get("passage_text", ""))
+            max(
+                _llm_passage_score(llm, sq["question"], e.get("passage_text", "")),
+                _llm_passage_score(llm, claim["claim_text"], e.get("passage_text", "")),
+            )
             for e in relevant
         ]
         hop_scores[sq["hop"]] = max(per_passage_scores) if per_passage_scores else 0.0
@@ -94,11 +97,15 @@ def score_evidence(
         sum(1 for s in hop_scores.values() if s > thresholds["min_hop_confidence"]) / n
     )
     confidence = sum(hop_scores.values()) / n
-    consistency = min(
-        modal_report.get("vc_score", 0.0),
-        modal_report.get("tc_score", 0.0),
-        modal_report.get("vt_score", 0.0),
-    )
+    modal_scores = [
+        s for s in [
+            modal_report.get("vc_score"),
+            modal_report.get("tc_score"),
+            modal_report.get("vt_score"),
+        ]
+        if s is not None
+    ]
+    consistency = sum(modal_scores) / len(modal_scores) if modal_scores else 0.0
 
     gate_pass = (
         coverage >= thresholds["coverage"]
