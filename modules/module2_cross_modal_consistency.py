@@ -19,7 +19,7 @@ def _clamp_01(value: object) -> float:
 
 
 from modules.prompt_template import (
-    _DECOMPOSITION_PROMPT_TEMPLATE as _LLM_MODAL_SYSTEM_PROMPT,
+    _CONSISTENCY_MODAL_SYSTEM_PROMPT as _LLM_MODAL_SYSTEM_PROMPT,
 )
 
 
