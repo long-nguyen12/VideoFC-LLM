@@ -66,6 +66,12 @@ def main():
         action="store_true",
         help="Use a single shared LLM across all roles to save VRAM.",
     )
+    parser.add_argument(
+        "--using-video-descriptor",
+        type=bool,
+        default=True,
+        help="Use video descriptor instead of visual captioner.",
+    )
 
     args = parser.parse_args()
 
@@ -95,7 +101,7 @@ def main():
     logger.info(f"CUDA available: {torch.cuda.is_available()}")
 
     if args.single_model:
-        bundle = load_single_llm_bundle(load_in_4bit=args.load_in_4bit)
+        bundle = load_single_llm_bundle(load_in_4bit=args.load_in_4bit, using_video_descriptor=args.using_video_descriptor)
     else:
         bundle = load_default_bundle(load_in_4bit=args.load_in_4bit)
 
