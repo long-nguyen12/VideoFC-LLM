@@ -20,7 +20,6 @@ from transformers import (
     LlavaNextForConditionalGeneration,
     LlavaNextProcessor,
     Qwen2VLForConditionalGeneration,
-    VideoLlama3ForConditionalGeneration,
 )
 from modules.utils import safe_json_parse as _safe_json_parse
 
@@ -405,7 +404,9 @@ class VideoDescriptor:
             "cuda" if torch.cuda.is_available() else "cpu"
         )
         logger.debug("Loading visual captioner: %s on %s", model_name, self.device)
-        self.processor = AutoProcessor.from_pretrained(model_name, trust_remote_code=True)
+        self.processor = AutoProcessor.from_pretrained(
+            model_name, trust_remote_code=True
+        )
         dtype = (
             torch.bfloat16
             if (self.device.type == "cuda" and torch.cuda.is_bf16_supported())
