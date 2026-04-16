@@ -20,6 +20,7 @@ from transformers import (
     LlavaNextForConditionalGeneration,
     LlavaNextProcessor,
     Qwen2VLForConditionalGeneration,
+    VideoLlama3ForConditionalGeneration,
 )
 from modules.utils import safe_json_parse as _safe_json_parse
 
@@ -390,6 +391,78 @@ class GenerativeLLM:
 
 
 # ---------------------------------------------------------------------------
+# Video Descriptor
+# ---------------------------------------------------------------------------
+
+
+class VideoDescriptor:
+    DEFAULT_MODEL = "DAMO-NLP-SG/VideoLLaMA3-7B"
+
+    def __init__(
+        self, model_name: str = DEFAULT_MODEL, device: Optional[torch.device] = None
+    ):
+        self.device = device or torch.device(
+            "cuda" if torch.cuda.is_available() else "cpu"
+        )
+        logger.debug("Loading visual captioner: %s on %s", model_name, self.device)
+        self.processor = AutoProcessor.from_pretrained(model_name)
+        dtype = (
+            torch.bfloat16
+            if (self.device.type == "cuda" and torch.cuda.is_bf16_supported())
+            else torch.float16
+        )
+        self.model = AutoModelForCausalLM.from_pretrained(
+            model_name,
+            trust_remote_code=True,
+            device_map="auto",
+            torch_dtype=torch.bfloat16,
+            attn_implementation="flash_attention_2",
+        )
+        if self.device.type != "cuda":
+            self.model = self.model.to(self.device)
+        self.model.eval()
+
+    @torch.inference_mode()
+    def caption(
+        self,
+        video_path: str,
+        prompt: str = "Please describe the video in detail.",
+    ) -> str:
+        if not video_path:
+            return ""
+
+        conversation = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "video",
+                        "video": {
+                            "video_path": video_path,
+                            "fps": 1,
+                            "max_frames": 180,
+                        },
+                    },
+                    {"type": "text", "text": prompt},
+                ],
+            }
+        ]
+        inputs = self.processor(conversation=conversation, return_tensors="pt")
+        inputs = {
+            k: v.cuda() if isinstance(v, torch.Tensor) else v for k, v in inputs.items()
+        }
+        if "pixel_values" in inputs:
+            inputs["pixel_values"] = inputs["pixel_values"].to(torch.bfloat16)
+
+        output_ids = self.model.generate(**inputs, max_new_tokens=256)
+        caption = self.processor.batch_decode(output_ids, skip_special_tokens=True)[
+            0
+        ].strip()
+
+        return caption
+
+
+# ---------------------------------------------------------------------------
 # Bundle Loaders
 # ---------------------------------------------------------------------------
 
@@ -416,8 +489,10 @@ def load_default_bundle(
 def load_single_llm_bundle(
     llm_model: str = "Qwen/Qwen3.5-4B",
     captioner_model: str = "Qwen/Qwen2-VL-2B-Instruct",
+    video_descriptor_model: str = "DAMO-NLP-SG/VideoLLaMA3-7B",
     load_in_4bit: bool = False,
     context_window: int = 8192,
+    using_video_descriptor: bool = False,
 ) -> dict:
     device = _device()
     logger.debug(
@@ -435,7 +510,13 @@ def load_single_llm_bundle(
         max_new_tokens_cap=1024,
         context_window=context_window,
     )
-    captioner = VisualCaptioner(captioner_model, device=device)
+
+    if using_video_descriptor:
+        logger.info("Using Video Descriptor for single-LLM bundle.")
+        captioner = VideoDescriptor(video_descriptor_model, device=device)
+    else:
+        logger.info("Using Visual Captioner for single-LLM bundle.")
+        captioner = VisualCaptioner(captioner_model, device=device)
 
     return {
         "captioner": captioner,

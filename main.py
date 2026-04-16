@@ -92,9 +92,6 @@ def main():
         logger.warning("No records loaded. Exiting.")
         sys.exit(0)
 
-    logger.info("Initializing REAL models (this may take a while)...")
-    # Ensure imports and model initializations run appropriately
-
     logger.info(f"CUDA available: {torch.cuda.is_available()}")
 
     if args.single_model:
@@ -107,11 +104,11 @@ def main():
     results = []
 
     logger.info(f"Starting evaluation loop over {len(items)} records...")
-    for i, (record, kf_paths) in enumerate(items, 1):
+    for i, (record, kf_paths, video_path) in enumerate(items, 1):
         vid_info = record["video_information"]
         vid = vid_info["video_id"]
         logger.info(f"Processing [{i}/{len(items)}] video_id={vid}...")
-        print(f"DEBUG: kf_paths for {vid} from load_for_pipeline = {kf_paths}")
+        print(f"DEBUG: video_path for {vid} from load_for_pipeline = {video_path}")
 
         try:
             result = run_dataset_record(
@@ -120,6 +117,7 @@ def main():
                 retriever=retriever,
                 use_rationale_hints=args.use_rationale_hints,
                 keyframe_paths=kf_paths if kf_paths else None,
+                video_path=video_path if video_path else None,  
             )
             results.append(result)
 

@@ -24,6 +24,7 @@ def run_fc_pipeline(
     retriever: DenseRetriever,
     use_rationale_hints: bool = True,
     max_sub_questions: int = 5,
+    video_path: str | None = None,
 ) -> dict:
     segment = inputs["segment"]
     claim_text = inputs["claim_text"]
@@ -39,12 +40,17 @@ def run_fc_pipeline(
     )
 
     logger.info("[1/7] Visual captioning")
-    if segment.get("keyframes", []):
+    if video_path:
+        try:
+            logger.info("Using video path for captioning: %s", video_path)
+            visual_caption = models["caption_fn"](video_path)
+            logger.debug("VLM caption: %s", visual_caption)
+        except Exception as e:
+            logger.error("Failed to generate visual caption from video path: %s", e)
+    else:
+        logger.info("No video path provided, skipping visual captioning.")
         visual_caption = models["caption_fn"](segment["keyframes"])
         logger.debug("VLM caption: %s", visual_caption)
-    else:
-        visual_caption = inputs["visual_caption"]
-        logger.debug("Synthetic caption (no keyframes): %s", visual_caption)
 
     logger.info("[2/7] Cross-modal consistency")
     modal_report = compute_modal_consistency_llm(
@@ -146,6 +152,7 @@ def run_dataset_record(
     retriever: DenseRetriever,
     use_rationale_hints: bool = True,
     keyframe_paths: list[str] | None = None,
+    video_path: str | None = None,
 ) -> dict:
     inputs = record_to_pipeline_inputs(record, keyframe_paths=keyframe_paths)
 
@@ -156,6 +163,7 @@ def run_dataset_record(
         models=models,
         retriever=retriever,
         use_rationale_hints=use_rationale_hints,
+        video_path=video_path,
     )
     pred_label = verdict_to_label(report.get("verdict", "unknown"))
     return {

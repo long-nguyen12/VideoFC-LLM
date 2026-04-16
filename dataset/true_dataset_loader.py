@@ -147,7 +147,9 @@ def record_to_evidence(record: dict) -> list[dict]:
             idx = int(m.group(1))
             if isinstance(value, (list, tuple)) and len(value) >= 1:
                 passage_text = str(value[0] or "")
-                urls = value[1] if len(value) >= 2 and isinstance(value[1], list) else []
+                urls = (
+                    value[1] if len(value) >= 2 and isinstance(value[1], list) else []
+                )
             else:
                 passage_text = str(value or "")
                 urls = []
@@ -217,12 +219,14 @@ def record_to_pipeline_inputs(
 ) -> dict:
     vi = record.get("video_information", {})
     claim_id = f"{vi.get('video_id', '')}"
+    video_path = resolve_video_path(claim_id)
     return {
         "claim_text": record.get("claim", ""),
         "claim_id": claim_id,
         "content": record.get("content", ""),
         "segment": record_to_segment(record, keyframe_paths),
         "visual_caption": record_to_visual_caption(record),
+        "video_path": video_path,
         "initial_evidence": record_to_evidence(record),
         "rationale_context": record_to_rationale_context(record),
         "gold_verdict": rating_to_verdict(record.get("rating", "")),
@@ -496,8 +500,9 @@ def load_for_pipeline(
     items: list[tuple[dict, list[str]]] = []
     for record in records:
         claim_id = record.get("video_information", {}).get("video_id")
+        video_path = resolve_video_path(claim_id, data_path=path)
         kf_paths = resolve_keyframe_path(claim_id, data_path=path)
-        items.append((record, kf_paths))
+        items.append((record, kf_paths, video_path))
 
     logger.info(
         "load_for_pipeline: split=%s → %d records (%d with keyframes)",
