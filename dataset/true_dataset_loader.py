@@ -504,12 +504,6 @@ def load_for_pipeline(
         kf_paths = resolve_keyframe_path(claim_id, data_path=path)
         items.append((record, kf_paths, video_path))
 
-    logger.info(
-        "load_for_pipeline: split=%s → %d records (%d with keyframes)",
-        split,
-        len(items),
-        sum(1 for _, kf in items if kf),
-    )
     return items
 
 
