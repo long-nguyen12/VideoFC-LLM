@@ -186,8 +186,8 @@ class GenerativeLLM:
         self,
         prompt: Union[str, List[dict]],
         max_new_tokens: int = 512,
-        temperature: float = 0.0,
-        do_sample: bool = False,
+        temperature: float = 0.7,
+        do_sample: bool = True,
     ) -> str:
         do_sample = do_sample and temperature > 0.0
 
@@ -221,8 +221,10 @@ class GenerativeLLM:
         }
         if do_sample:
             kwargs["temperature"] = max(temperature, 1e-5)
-            kwargs["top_p"] = 0.9
-            kwargs["top_k"] = 50
+            kwargs["top_p"] = 0.8
+            kwargs["top_k"] = 20
+            kwargs["min_p"] = 0.0
+
 
         output_ids = self.model.generate(**inputs, **kwargs)
         generated = output_ids[0, input_len:]

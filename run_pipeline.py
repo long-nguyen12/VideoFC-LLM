@@ -51,7 +51,8 @@ def run_fc_pipeline(
         logger.info("No video path provided, skipping visual captioning.")
         visual_caption = models["caption_fn"](segment["keyframes"])
         logger.debug("VLM caption: %s", visual_caption)
-
+    print(f"DEBUG: Visual caption for claim_id={claim_id} = {visual_caption}")
+    
     logger.info("[2/7] Cross-modal consistency")
     modal_report = compute_modal_consistency_llm(
         claim_text=claim_text,
